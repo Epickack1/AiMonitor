@@ -1,10 +1,16 @@
 <div class="card model-card mb-4">
     <div class="card-body">
-        <h1 class="card-title h3">{{ model.name }}</h1>
+        <h1 class="card-title h3">
+            {{ model.name }}
+            {% if not model.is_tracked %}
+                <span class="badge bg-secondary fs-6 align-middle">не отслеживается</span>
+            {% endif %}
+        </h1>
         <p class="card-text">
-            <strong>ID:</strong> <code>{{ model.id }}</code>
-            <button class="copy-id" type="button" data-model-id="{{ model.id }}" title="Скопировать id">⧉</button>
+            <strong>ID:</strong> <code>{{ model.openrouter_id }}</code>
+            <button class="copy-id" type="button" data-model-id="{{ model.openrouter_id }}" title="Скопировать id">⧉</button>
         </p>
+        <p class="card-text"><strong>Разработчик:</strong> {{ model.vendor_name }}</p>
         <p class="card-text"><strong>Тип:</strong> {{ model.is_free|yesno:"бесплатная,платная" }}</p>
         <p class="card-text">
             <strong>Статус сейчас:</strong>

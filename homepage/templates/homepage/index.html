@@ -12,6 +12,26 @@
         Приложение показывает, какие из отслеживаемых моделей сейчас
         доступны, сколько провайдеров у каждой работает и каков их аптайм.
     </p>
+    <div class="row row-cols-1 row-cols-sm-3 g-3 my-3">
+        <div class="col">
+            <div class="card stat-card h-100"><div class="card-body">
+                <p class="stat-label mb-1">Отслеживается моделей</p>
+                <p class="h3 mb-0">{{ summary.models_count }}</p>
+            </div></div>
+        </div>
+        <div class="col">
+            <div class="card stat-card h-100"><div class="card-body">
+                <p class="stat-label mb-1">Выполнено проверок</p>
+                <p class="h3 mb-0">{{ summary.checks_count }}</p>
+            </div></div>
+        </div>
+        <div class="col">
+            <div class="card stat-card h-100"><div class="card-body">
+                <p class="stat-label mb-1">Последняя проверка</p>
+                <p class="h5 mb-0">{{ summary.last_checked_at|default:"ещё не было" }}</p>
+            </div></div>
+        </div>
+    </div>
     <a href="{% url 'watchlist:list' %}" class="btn btn-primary me-2">
         Отслеживаемые модели
     </a>

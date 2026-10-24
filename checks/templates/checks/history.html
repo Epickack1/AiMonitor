@@ -4,8 +4,37 @@
 
 {% block content %}
     <h1>История проверок</h1>
+
+    <form method="get" class="row g-2 align-items-center mb-3">
+        <div class="col-auto">
+            <select name="day" class="form-select" aria-label="День проверки">
+                <option value="">все дни</option>
+                {% for item in days %}
+                    <option value="{{ item.day }}" {% if item.day == day %}selected{% endif %}>{{ item.day }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <select name="status" class="form-select" aria-label="Статус">
+                <option value="">любой статус</option>
+                {% for item in statuses %}
+                    <option value="{{ item.status }}" {% if item.status == status %}selected{% endif %}>
+                        {{ item.status }} ({{ item.checks_count }})
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Показать</button>
+            {% if day or status %}
+                <a href="{% url 'checks:history' %}" class="btn btn-link">сбросить</a>
+            {% endif %}
+        </div>
+    </form>
+
     <p class="text-muted">
-        Всего проверок: {{ total }}. Показаны последние {{ results|length }}.
+        {% if day or status %}Найдено{% else %}Всего{% endif %} проверок: {{ total }}.
+        Показаны последние {{ results|length }}.
     </p>
 
     <div class="table-responsive">
@@ -23,8 +52,8 @@
                     <tr>
                         <td>{{ result.checked_at }}</td>
                         <td>
-                            <a href="{% url 'watchlist:detail' result.model.id %}">
-                                {{ result.model.name|truncatechars:40 }}
+                            <a href="{% url 'watchlist:detail' result.openrouter_id %}">
+                                {{ result.model_name|truncatechars:40 }}
                             </a>
                         </td>
                         <td>{% include "includes/status_badge.html" with status=result.status %}</td>
@@ -33,8 +62,13 @@
                 {% empty %}
                     <tr>
                         <td colspan="4">
-                            История пуста. Проверьте модели в консольной версии
-                            (python main.py, пункт 1).
+                            {% if day or status %}
+                                Проверок с выбранными условиями нет.
+                            {% else %}
+                                История пуста. Проверьте модели в консольной версии
+                                (python main.py, пункт 1) и перенесите данные
+                                в базу: python -m db.import_json.
+                            {% endif %}
                         </td>
                     </tr>
                 {% endfor %}

@@ -17,6 +17,7 @@
             {% endif %}
         </div>
 
+        <h2 class="h4">По моделям</h2>
         <div class="table-responsive">
             <table class="table table-hover align-middle">
                 <thead class="table-light">
@@ -31,15 +32,59 @@
                     {% for item in model_stats %}
                         <tr>
                             <td>
-                                <a href="{% url 'watchlist:detail' item.model.id %}">{{ item.model.name }}</a>
+                                <a href="{% url 'watchlist:detail' item.openrouter_id %}">{{ item.name }}</a>
                             </td>
-                            <td>{{ item.checks }}</td>
+                            <td>{{ item.checks_count }}</td>
                             <td>{{ item.percent|floatformat:0 }}%</td>
                             <td>{% include "includes/uptime.html" with value=item.avg_uptime %}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <div class="row g-4 mt-1">
+            <div class="col-lg-4">
+                <h2 class="h4">Проблемные модели</h2>
+                {% for item in problem_models %}
+                    <p class="mb-1">
+                        <a href="{% url 'watchlist:detail' item.openrouter_id %}">{{ item.name }}</a>
+                        <span class="text-muted">— неуспешно {{ item.failed_count }} из {{ item.checks_count }}</span>
+                    </p>
+                {% empty %}
+                    <p class="text-muted">Все проверки были успешными.</p>
+                {% endfor %}
+            </div>
+            <div class="col-lg-4">
+                <h2 class="h4">По статусам</h2>
+                <table class="table table-sm">
+                    <tbody>
+                        {% for item in status_counts %}
+                            <tr>
+                                <td>{% include "includes/status_badge.html" with status=item.status %}</td>
+                                <td class="text-end">{{ item.checks_count }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-lg-4">
+                <h2 class="h4">По разработчикам</h2>
+                <table class="table table-sm">
+                    <thead class="table-light">
+                        <tr><th>Разработчик</th><th class="text-end">Моделей</th><th class="text-end">Проверок</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for item in vendors %}
+                            <tr>
+                                <td>{{ item.vendor_name }}</td>
+                                <td class="text-end">{{ item.models_count }}</td>
+                                <td class="text-end">{{ item.checks_count }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     {% else %}
         <p class="text-muted">История пуста: статистику не по чему считать.</p>

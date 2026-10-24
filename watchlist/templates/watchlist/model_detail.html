@@ -49,9 +49,9 @@
         <h2 class="h4 mt-4">История проверок</h2>
         {% if history %}
             <p>
-                Проверок: {{ stats.checks }}, доступна в
-                {{ stats.percent|floatformat:0 }}% проверок, средний аптайм
-                {% include "includes/uptime.html" with value=stats.avg_uptime %}.
+                Проверок: {{ summary.checks_count }}, доступна в
+                {{ summary.percent|floatformat:0 }}% проверок, средний аптайм
+                {% include "includes/uptime.html" with value=summary.avg_uptime %}.
             </p>
             <table class="table table-sm">
                 <thead class="table-light">

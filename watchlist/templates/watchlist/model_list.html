@@ -4,12 +4,46 @@
 
 {% block content %}
     <h1>Отслеживаемые модели</h1>
-    <p class="text-muted">Всего моделей: {{ items|length }}</p>
+
+    <form method="get" class="row g-2 align-items-center mb-3">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <div class="col-sm-6 col-lg-4">
+            <input
+                type="search"
+                name="q"
+                value="{{ query }}"
+                class="form-control"
+                placeholder="Поиск по id или названию"
+                aria-label="Поиск модели"
+            >
+        </div>
+        <div class="col-auto form-check ms-2">
+            <input
+                type="checkbox"
+                name="free"
+                value="1"
+                id="free"
+                class="form-check-input"
+                {% if free_only %}checked{% endif %}
+            >
+            <label for="free" class="form-check-label">только бесплатные</label>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Найти</button>
+            {% if query or free_only %}
+                <a href="{% url 'watchlist:list' %}" class="btn btn-link">сбросить</a>
+            {% endif %}
+        </div>
+    </form>
+
+    <p class="text-muted">
+        {% if query or free_only %}Найдено{% else %}Всего{% endif %} моделей: {{ models|length }}
+    </p>
 
     <div class="btn-group mb-3">
         {% for key, label in sort_options.items %}
             <a
-                href="{% url 'watchlist:list' %}{% if key %}?sort={{ key }}{% endif %}"
+                href="{% url 'watchlist:list' %}?sort={{ key }}&q={{ query|urlencode }}{% if free_only %}&free=1{% endif %}"
                 class="btn btn-sm {% if key == sort %}btn-dark{% else %}btn-outline-dark{% endif %}"
             >{{ label }}</a>
         {% endfor %}
@@ -26,10 +60,18 @@
                 </tr>
             </thead>
             <tbody>
-                {% for item in items %}
-                    {% include "watchlist/includes/model_row.html" with model=item.model result=item.result %}
+                {% for model in models %}
+                    {% include "watchlist/includes/model_row.html" %}
                 {% empty %}
-                    <tr><td colspan="4">Список отслеживания пуст.</td></tr>
+                    <tr>
+                        <td colspan="4">
+                            {% if query or free_only %}
+                                Подходящих моделей нет.
+                            {% else %}
+                                Список отслеживания пуст.
+                            {% endif %}
+                        </td>
+                    </tr>
                 {% endfor %}
             </tbody>
         </table>

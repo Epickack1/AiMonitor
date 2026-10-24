@@ -1,21 +1,21 @@
 <tr>
     <td>
-        <a href="{% url 'watchlist:detail' model.id %}">{{ model.name|default:model.id }}</a>
+        <a href="{% url 'watchlist:detail' model.openrouter_id %}">{{ model.name|default:model.openrouter_id }}</a>
         {% if model.is_free %}<span class="badge bg-info text-dark">free</span>{% endif %}
     </td>
     <td>
-        <code>{{ model.id }}</code>
-        <button class="copy-id" type="button" data-model-id="{{ model.id }}" title="Скопировать id">⧉</button>
+        <code>{{ model.openrouter_id }}</code>
+        <button class="copy-id" type="button" data-model-id="{{ model.openrouter_id }}" title="Скопировать id">⧉</button>
     </td>
     <td>
-        {% if result %}
-            {% include "includes/status_badge.html" with status=result.status %}
-            {{ result.checked_at }}
+        {% if model.checked_at %}
+            {% include "includes/status_badge.html" with status=model.status %}
+            {{ model.checked_at }}
         {% else %}
             <span class="text-muted">не проверялась</span>
         {% endif %}
     </td>
     <td>
-        {% if result %}{% include "includes/uptime.html" with value=result.uptime %}{% endif %}
+        {% if model.checked_at %}{% include "includes/uptime.html" with value=model.uptime %}{% endif %}
     </td>
 </tr>
