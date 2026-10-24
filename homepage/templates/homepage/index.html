@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Главная – AIMonitor{% endblock %}
+
+{% block content %}
+    <h1 class="display-5">AIMonitor</h1>
+    <p class="lead">
+        Мониторинг доступности моделей искусственного интеллекта
+        в сервисе OpenRouter.
+    </p>
+    <p>
+        Приложение показывает, какие из отслеживаемых моделей сейчас
+        доступны, сколько провайдеров у каждой работает и каков их аптайм.
+    </p>
+    <a href="{% url 'watchlist:list' %}" class="btn btn-primary me-2">
+        Отслеживаемые модели
+    </a>
+    <a href="{% url 'checks:history' %}" class="btn btn-secondary me-2">
+        История проверок
+    </a>
+    <a href="{% url 'checks:stats' %}" class="btn btn-outline-secondary">
+        Статистика
+    </a>
+{% endblock %}

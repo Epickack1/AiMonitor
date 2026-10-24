@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{% if model %}{{ model.name }}{% else %}Модель не найдена{% endif %} – AIMonitor{% endblock %}
+
+{% block content %}
+    {% if model %}
+        {% include "watchlist/includes/model_card.html" %}
+
+        <h2 class="h4">Провайдеры</h2>
+        {% if result.providers %}
+            <p>Работают {{ working }} из {{ result.providers|length }} провайдеров.</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Провайдер</th>
+                            <th>Состояние</th>
+                            <th>5 мин</th>
+                            <th>30 мин</th>
+                            <th>Сутки</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for provider in result.providers %}
+                            <tr>
+                                <td>{{ provider.name }}</td>
+                                <td>
+                                    {% if provider.is_working %}
+                                        <span class="badge bg-success">работает</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">сбой</span>
+                                    {% endif %}
+                                </td>
+                                <td>{% include "includes/uptime.html" with value=provider.uptime_5m %}</td>
+                                <td>{% include "includes/uptime.html" with value=provider.uptime_30m %}</td>
+                                <td>{% include "includes/uptime.html" with value=provider.uptime_1d %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted">
+                Нет данных о провайдерах: модели нет в OpenRouter
+                или нет связи с сервисом.
+            </p>
+        {% endif %}
+
+        <h2 class="h4 mt-4">История проверок</h2>
+        {% if history %}
+            <p>
+                Проверок: {{ stats.checks }}, доступна в
+                {{ stats.percent|floatformat:0 }}% проверок, средний аптайм
+                {% include "includes/uptime.html" with value=stats.avg_uptime %}.
+            </p>
+            <table class="table table-sm">
+                <thead class="table-light">
+                    <tr><th>Время</th><th>Статус</th><th>Аптайм</th></tr>
+                </thead>
+                <tbody>
+                    {% for check in history %}
+                        <tr>
+                            <td>{{ check.checked_at }}</td>
+                            <td>{% include "includes/status_badge.html" with status=check.status %}</td>
+                            <td>{% include "includes/uptime.html" with value=check.uptime %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="text-muted">Модель ещё не проверялась.</p>
+        {% endif %}
+    {% else %}
+        <h1 class="text-danger">Модель не найдена</h1>
+        <p>Модели <code>{{ model_id }}</code> нет в списке отслеживания.</p>
+    {% endif %}
+
+    <a href="{% url 'watchlist:list' %}" class="btn btn-outline-secondary">
+        ← к списку моделей
+    </a>
+{% endblock %}

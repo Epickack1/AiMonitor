@@ -1,0 +1,29 @@
+{% load static %}
+{% with section=request.resolver_match.namespace %}
+<nav class="navbar navbar-expand bg-dark navbar-dark mb-4">
+    <div class="container">
+        <a class="navbar-brand" href="{% url 'homepage:index' %}">
+            <img
+                src="{% static 'homepage/img/logo.svg' %}"
+                alt="Логотип AIMonitor"
+                class="aimonitor-logo"
+            >
+            AIMonitor
+        </a>
+        <div class="navbar-nav">
+            <a
+                class="nav-link{% if section == 'watchlist' %} active{% endif %}"
+                href="{% url 'watchlist:list' %}"
+            >Модели</a>
+            <a
+                class="nav-link{% if request.resolver_match.view_name == 'checks:history' %} active{% endif %}"
+                href="{% url 'checks:history' %}"
+            >История проверок</a>
+            <a
+                class="nav-link{% if request.resolver_match.view_name == 'checks:stats' %} active{% endif %}"
+                href="{% url 'checks:stats' %}"
+            >Статистика</a>
+        </div>
+    </div>
+</nav>
+{% endwith %}

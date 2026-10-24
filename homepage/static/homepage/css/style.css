@@ -1,0 +1,56 @@
+/* Собственные стили AIMonitor поверх Bootstrap */
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.aimonitor-logo {
+    width: 28px;
+    height: 28px;
+    margin-right: 0.35rem;
+    vertical-align: -6px;
+}
+
+.status-badge {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.model-card {
+    border-left: 4px solid #0d6efd;
+}
+
+.stat-card .stat-label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: #6c757d;
+}
+
+.copy-id {
+    cursor: pointer;
+    border: 0;
+    background: none;
+    padding: 0 0.25rem;
+    color: #6c757d;
+}
+
+.copy-id:hover {
+    color: #0d6efd;
+}
+
+.copy-id.copied {
+    color: #198754;
+}
+
+.site-footer {
+    padding: 1rem 0;
+    border-top: 1px solid #dee2e6;
+    color: #6c757d;
+    font-size: 0.9rem;
+}

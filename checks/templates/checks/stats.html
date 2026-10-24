@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика – AIMonitor{% endblock %}
+
+{% block content %}
+    <h1>Статистика доступности</h1>
+
+    {% if model_stats %}
+        <p class="text-muted">
+            Проверок: {{ total }}, моделей: {{ model_stats|length }}.
+        </p>
+
+        <div class="row row-cols-1 row-cols-md-2 g-3 mb-4">
+            {% include "checks/includes/stat_card.html" with label="Самая стабильная" item=model_stats|first border="border-success" %}
+            {% if model_stats|length > 1 %}
+                {% include "checks/includes/stat_card.html" with label="Самая проблемная" item=model_stats|last border="border-danger" %}
+            {% endif %}
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Модель</th>
+                        <th>Проверок</th>
+                        <th>Доступна</th>
+                        <th>Средний аптайм</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in model_stats %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'watchlist:detail' item.model.id %}">{{ item.model.name }}</a>
+                            </td>
+                            <td>{{ item.checks }}</td>
+                            <td>{{ item.percent|floatformat:0 }}%</td>
+                            <td>{% include "includes/uptime.html" with value=item.avg_uptime %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted">История пуста: статистику не по чему считать.</p>
+    {% endif %}
+{% endblock %}

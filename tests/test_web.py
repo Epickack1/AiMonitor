@@ -58,9 +58,23 @@ def test_index(client):
     response = client.get("/")
     assert response.status_code == 200
     text = response.content.decode()
-    assert "<title>AIMonitor</title>" in text
+    assert "<title>Главная – AIMonitor</title>" in text
     assert 'href="/models/"' in text
     assert "bootstrap" in text
+    assert "/static/homepage/css/style.css" in text
+    assert "/static/homepage/js/main.js" in text
+
+
+def template_names(response):
+    return [template.name for template in response.templates]
+
+
+def test_pages_extend_base_template(client):
+    for url in ("/", "/models/", "/models/openai/gpt-4o-mini/",
+                "/checks/", "/checks/stats/"):
+        names = template_names(client.get(url))
+        assert "base.html" in names
+        assert "includes/navigation.html" in names
 
 
 def test_models_list(client):
@@ -77,6 +91,20 @@ def test_models_list_sorted_by_uptime(client):
     assert text.index("OpenAI: GPT-4o-mini") < text.index("Google: Gemma")
 
 
+def test_models_list_uses_include_per_model(client):
+    response = client.get("/models/")
+    assert response.context["items"][0]["result"].uptime == 100.0
+    assert template_names(response).count(
+        "watchlist/includes/model_row.html"
+    ) == 2
+
+
+def test_models_list_empty(client, models):
+    models.clear()
+    text = client.get("/models/").content.decode()
+    assert "Список отслеживания пуст" in text
+
+
 def test_models_list_unknown_sort_ignored(client):
     assert client.get("/models/?sort=bad").status_code == 200
 
@@ -85,7 +113,8 @@ def test_model_detail(client):
     response = client.get("/models/openai/gpt-4o-mini/")
     assert response.status_code == 200
     text = response.content.decode()
-    assert "<title>OpenAI: GPT-4o-mini</title>" in text
+    assert "<title>OpenAI: GPT-4o-mini – AIMonitor</title>" in text
+    assert "watchlist/includes/model_card.html" in template_names(response)
     assert "Работают 1 из 2 провайдеров" in text
     assert "Azure" in text
     assert "Проверок: 2" in text

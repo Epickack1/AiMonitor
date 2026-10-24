@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Модели – AIMonitor{% endblock %}
+
+{% block content %}
+    <h1>Отслеживаемые модели</h1>
+    <p class="text-muted">Всего моделей: {{ items|length }}</p>
+
+    <div class="btn-group mb-3">
+        {% for key, label in sort_options.items %}
+            <a
+                href="{% url 'watchlist:list' %}{% if key %}?sort={{ key }}{% endif %}"
+                class="btn btn-sm {% if key == sort %}btn-dark{% else %}btn-outline-dark{% endif %}"
+            >{{ label }}</a>
+        {% endfor %}
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Модель</th>
+                    <th>ID в OpenRouter</th>
+                    <th>Последняя проверка</th>
+                    <th>Аптайм</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                    {% include "watchlist/includes/model_row.html" with model=item.model result=item.result %}
+                {% empty %}
+                    <tr><td colspan="4">Список отслеживания пуст.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% if status == "Доступна" %}
+    <span class="badge bg-success status-badge">{{ status }}</span>
+{% elif status == "Нестабильна" %}
+    <span class="badge bg-warning text-dark status-badge">{{ status }}</span>
+{% elif status == "Недоступна" %}
+    <span class="badge bg-danger status-badge">{{ status }}</span>
+{% else %}
+    <span class="badge bg-secondary status-badge">{{ status|default:"нет данных" }}</span>
+{% endif %}

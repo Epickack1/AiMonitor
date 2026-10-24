@@ -8,7 +8,9 @@ from django.urls import path
 
 from . import views
 
+app_name = "watchlist"
+
 urlpatterns = [
-    path("", views.models_list, name="models_list"),
-    path("<path:model_id>/", views.model_detail, name="model_detail"),
+    path("", views.models_list, name="list"),
+    path("<path:model_id>/", views.model_detail, name="detail"),
 ]
