@@ -1,3 +1,6 @@
 [flake8]
-extend-exclude = .venv, venv, migrations
+# exclude, а не extend-exclude: параметр --extend-exclude из командной
+# строки заменил бы extend-exclude из файла, а exclude он дополняет.
+# Миграции генерирует Django, их строки длиннее 79 символов.
+exclude = .git, __pycache__, .venv, venv, migrations
 max-line-length = 79

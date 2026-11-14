@@ -43,7 +43,7 @@
     <div class="btn-group mb-3">
         {% for key, label in sort_options.items %}
             <a
-                href="{% url 'watchlist:list' %}?sort={{ key }}&q={{ query|urlencode }}{% if free_only %}&free=1{% endif %}"
+                href="{% querystring sort=key %}"
                 class="btn btn-sm {% if key == sort %}btn-dark{% else %}btn-outline-dark{% endif %}"
             >{{ label }}</a>
         {% endfor %}

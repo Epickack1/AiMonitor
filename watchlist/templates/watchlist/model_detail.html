@@ -60,7 +60,7 @@
                 <tbody>
                     {% for check in history %}
                         <tr>
-                            <td>{{ check.checked_at }}</td>
+                            <td>{{ check.checked_at|date:"Y-m-d H:i" }}</td>
                             <td>{% include "includes/status_badge.html" with status=check.status %}</td>
                             <td>{% include "includes/uptime.html" with value=check.uptime %}</td>
                         </tr>

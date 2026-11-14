@@ -1,22 +1,20 @@
 """Главная страница и страница ошибки 404."""
 
+from django.db.models import Count, Max
 from django.shortcuts import render
 
-from db.database import fetch_one
-
-SUMMARY_SQL = """
-    SELECT
-        (SELECT COUNT(*) FROM models WHERE is_tracked = 1) AS models_count,
-        COUNT(*) AS checks_count,
-        MAX(checked_at) AS last_checked_at
-    FROM checks
-"""
+from checks.models import Check
+from watchlist.models import AIModel
 
 
 def index(request):
     """Главная страница: назначение приложения, сводка и разделы."""
-    context = {"summary": fetch_one(SUMMARY_SQL)}
-    return render(request, "homepage/index.html", context)
+    summary = Check.objects.aggregate(
+        checks_count=Count("id"),
+        last_checked_at=Max("checked_at"),
+    )
+    summary["models_count"] = AIModel.objects.filter(is_tracked=True).count()
+    return render(request, "homepage/index.html", {"summary": summary})
 
 
 def page_not_found(request, exception):

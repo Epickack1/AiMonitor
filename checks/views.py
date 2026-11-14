@@ -1,116 +1,128 @@
 """Страницы истории проверок и статистики доступности моделей.
 
-Данные читаются из SQLite (data/aimonitor.sqlite) SQL-запросами.
+Данные читаются из моделей Django через ORM.
 """
 
+import datetime
+
+from django.core.paginator import Paginator
+from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Q
+from django.db.models.functions import TruncDate
 from django.shortcuts import render
 
-from db.database import fetch_all, fetch_one
 from models.provider import STATUS_AVAILABLE
+from watchlist.models import AIModel, Vendor
 
-HISTORY_LIMIT = 100
+from .models import STATUS_CHOICES, Check
 
-# Необязательные фильтры: пустая строка в параметре отключает условие.
-HISTORY_FILTER = """
-    WHERE (:day = '' OR substr(checks.checked_at, 1, 10) = :day)
-      AND (:status = '' OR checks.status = :status)
-"""
+PAGE_SIZE = 10
 
-HISTORY_SQL = """
-    SELECT
-        checks.checked_at,
-        checks.status,
-        checks.uptime,
-        models.openrouter_id,
-        models.name AS model_name
-    FROM checks
-    JOIN models
-        ON checks.model_id = models.id
-""" + HISTORY_FILTER + """
-    ORDER BY checks.id DESC
-    LIMIT :limit
-"""
+STATUSES = [status for status, _ in STATUS_CHOICES]
 
-HISTORY_COUNT_SQL = """
-    SELECT COUNT(*) AS checks_count
-    FROM checks
-""" + HISTORY_FILTER
+# Ключ из ?sort= → подпись и поля order_by(). Префикс «-» — по убыванию,
+# второе поле упорядочивает записи с одинаковым первым.
+SORT_OPTIONS = {
+    "new": ("сначала новые", ("-checked_at", "-id")),
+    "old": ("сначала старые", ("checked_at", "id")),
+    "model": ("по модели", ("model__name", "-checked_at")),
+    "uptime": (
+        "по аптайму",
+        (F("uptime").desc(nulls_last=True), "-checked_at"),
+    ),
+}
 
-DAYS_SQL = """
-    SELECT DISTINCT substr(checked_at, 1, 10) AS day
-    FROM checks
-    ORDER BY day DESC
-"""
 
-STATUS_COUNTS_SQL = """
-    SELECT
-        status,
-        COUNT(*) AS checks_count
-    FROM checks
-    GROUP BY status
-    ORDER BY checks_count DESC
-"""
+def status_counts():
+    """Число проверок с каждым статусом: GROUP BY status."""
+    return (
+        Check.objects.values("status")
+        .annotate(checks_count=Count("id"))
+        .order_by("-checks_count", "status")
+    )
 
-MODEL_STATS_SQL = """
-    SELECT
-        models.openrouter_id,
-        models.name,
-        COUNT(checks.id) AS checks_count,
-        ROUND(100.0 * SUM(checks.status = ?) / COUNT(checks.id), 1)
-            AS percent,
-        AVG(checks.uptime) AS avg_uptime
-    FROM models
-    JOIN checks
-        ON checks.model_id = models.id
-    GROUP BY models.id, models.openrouter_id, models.name
-    ORDER BY percent DESC, COALESCE(avg_uptime, 0) DESC, models.openrouter_id
-"""
 
-PROBLEM_MODELS_SQL = """
-    SELECT
-        models.openrouter_id,
-        models.name,
-        COUNT(checks.id) AS checks_count,
-        COUNT(checks.id) - SUM(checks.status = ?) AS failed_count
-    FROM models
-    JOIN checks
-        ON checks.model_id = models.id
-    GROUP BY models.id, models.openrouter_id, models.name
-    HAVING SUM(checks.status = ?) < COUNT(checks.id)
-    ORDER BY failed_count DESC, models.openrouter_id
-"""
+def filter_checks(params) -> tuple:
+    """Отфильтровать проверки по параметрам адреса.
 
-VENDOR_STATS_SQL = """
-    SELECT
-        vendors.name AS vendor_name,
-        COUNT(DISTINCT models.id) AS models_count,
-        COUNT(checks.id) AS checks_count
-    FROM vendors
-    JOIN models
-        ON models.vendor_id = vendors.id
-    LEFT JOIN checks
-        ON checks.model_id = models.id
-    WHERE models.is_tracked = 1
-    GROUP BY vendors.id, vendors.name
-    ORDER BY models_count DESC, vendor_name
-"""
+    Параметры — строки из request.GET. Каждый проверяется; некорректный
+    не применяется, а в список ошибок добавляется сообщение. Возвращает
+    набор проверок, ошибки и очищенные значения фильтров.
+    """
+    errors = []
+    checks = Check.objects.select_related("model", "model__vendor")
+
+    # Дата: строка ГГГГ-ММ-ДД → datetime.date
+    day = params.get("day", "").strip()
+    if day:
+        try:
+            checks = checks.filter(
+                checked_at__date=datetime.date.fromisoformat(day)
+            )
+        except ValueError:
+            errors.append(
+                f"Некорректная дата «{day}»: нужен формат ГГГГ-ММ-ДД."
+            )
+
+    # Статус: только из списка допустимых
+    status = params.get("status", "")
+    if status in STATUSES:
+        checks = checks.filter(status=status)
+    elif status:
+        errors.append(f"Неизвестный статус «{status}».")
+
+    # Разработчик: фильтр по полю модели, связанной через model
+    vendor = params.get("vendor", "")
+    if vendor:
+        checks = checks.filter(model__vendor__slug=vendor)
+
+    # Поиск по названию или id модели (связанная модель AIModel)
+    query = params.get("q", "").strip()
+    if query:
+        checks = checks.filter(
+            Q(model__name__icontains=query)
+            | Q(model__openrouter_id__icontains=query)
+        )
+
+    sort = params.get("sort", "new")
+    if sort not in SORT_OPTIONS:
+        sort = "new"
+    checks = checks.order_by(*SORT_OPTIONS[sort][1])
+
+    filters = {
+        "day": day, "status": status, "vendor": vendor,
+        "query": query, "sort": sort,
+    }
+    return checks, errors, filters
 
 
 def history(request):
-    """Страница /checks/: проверки за выбранный день и с выбранным статусом.
+    """Страница /checks/: проверки с фильтрами, сортировкой и страницами.
 
-    Значения из адреса /checks/?day=...&status=... передаются в запрос
-    параметрами, поэтому не могут изменить его текст.
+    Paginator делит результат на страницы по PAGE_SIZE проверок.
+    get_page() заменяет некорректный номер страницы на первую,
+    а слишком большой — на последнюю.
     """
-    filters = {
-        "day": request.GET.get("day", ""),
-        "status": request.GET.get("status", ""),
-    }
+    checks, errors, filters = filter_checks(request.GET)
+    page = Paginator(checks, PAGE_SIZE).get_page(request.GET.get("page"))
+
+    days = (
+        Check.objects.annotate(day=TruncDate("checked_at"))
+        .values_list("day", flat=True)
+        .distinct()
+        .order_by("-day")
+    )
     context = {
-        "results": fetch_all(HISTORY_SQL, {**filters, "limit": HISTORY_LIMIT}),
-        "total": fetch_one(HISTORY_COUNT_SQL, filters)["checks_count"],
-        "days": fetch_all(DAYS_SQL),
-        "statuses": fetch_all(STATUS_COUNTS_SQL),
+        "page": page,
+        "errors": errors,
+        "filtered": any(
+            filters[key] for key in ("day", "status", "vendor", "query")
+        ),
+        "days": days,
+        "statuses": status_counts(),
+        "vendors": Vendor.objects.filter(models__isnull=False).distinct(),
+        "sort_options": {
+            key: label for key, (label, _) in SORT_OPTIONS.items()
+        },
         **filters,
     }
     return render(request, "checks/history.html", context)
@@ -118,14 +130,46 @@ def history(request):
 
 def stats(request):
     """Страница /checks/stats/: статистика доступности по истории."""
-    model_stats = fetch_all(MODEL_STATS_SQL, [STATUS_AVAILABLE])
+    model_stats = (
+        AIModel.objects.annotate(
+            checks_count=Count("checks"),
+            available_count=Count(
+                "checks", filter=Q(checks__status=STATUS_AVAILABLE)
+            ),
+            avg_uptime=Avg("checks__uptime"),
+        )
+        .filter(checks_count__gt=0)
+        .annotate(
+            percent=ExpressionWrapper(
+                100.0 * F("available_count") / F("checks_count"),
+                output_field=FloatField(),
+            ),
+            failed_count=F("checks_count") - F("available_count"),
+        )
+    )
+    # Проблемные — все, кроме моделей, у которых успешны все проверки
+    problem_models = model_stats.exclude(
+        available_count=F("checks_count")
+    ).order_by("-failed_count", "openrouter_id")
+    # Список, а не QuerySet: шаблону нужен фильтр last, а QuerySet
+    # не поддерживает отрицательные индексы
+    model_stats = list(model_stats.order_by(
+        "-percent", F("avg_uptime").desc(nulls_last=True), "openrouter_id"
+    ))
+
+    vendors = (
+        Vendor.objects.filter(models__is_tracked=True)
+        .annotate(
+            models_count=Count("models", distinct=True),
+            checks_count=Count("models__checks"),
+        )
+        .order_by("-models_count", "name")
+    )
     context = {
         "model_stats": model_stats,
-        "total": sum(item["checks_count"] for item in model_stats),
-        "problem_models": fetch_all(
-            PROBLEM_MODELS_SQL, [STATUS_AVAILABLE, STATUS_AVAILABLE]
-        ),
-        "status_counts": fetch_all(STATUS_COUNTS_SQL),
-        "vendors": fetch_all(VENDOR_STATS_SQL),
+        "total": Check.objects.count(),
+        "problem_models": problem_models,
+        "status_counts": status_counts(),
+        "vendors": vendors,
     }
     return render(request, "checks/stats.html", context)

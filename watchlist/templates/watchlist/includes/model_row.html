@@ -8,14 +8,14 @@
         <button class="copy-id" type="button" data-model-id="{{ model.openrouter_id }}" title="Скопировать id">⧉</button>
     </td>
     <td>
-        {% if model.checked_at %}
-            {% include "includes/status_badge.html" with status=model.status %}
-            {{ model.checked_at }}
+        {% if model.last_checked_at %}
+            {% include "includes/status_badge.html" with status=model.last_status %}
+            {{ model.last_checked_at|date:"Y-m-d H:i" }}
         {% else %}
             <span class="text-muted">не проверялась</span>
         {% endif %}
     </td>
     <td>
-        {% if model.checked_at %}{% include "includes/uptime.html" with value=model.uptime %}{% endif %}
+        {% if model.last_checked_at %}{% include "includes/uptime.html" with value=model.last_uptime %}{% endif %}
     </td>
 </tr>

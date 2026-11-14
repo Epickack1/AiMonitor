@@ -1,96 +1,50 @@
 """Страницы отслеживаемых моделей: список и подробная информация.
 
-Данные читаются из SQLite (data/aimonitor.sqlite) SQL-запросами,
-текущее состояние провайдеров — из OpenRouter.
+Данные читаются из моделей Django через ORM, текущее состояние
+провайдеров — из OpenRouter.
 """
 
+from django.db.models import Avg, Count, F, OuterRef, Q, Subquery
+from django.db.models.functions import Lower
 from django.shortcuts import render
 
-from db.database import fetch_all, fetch_one
-from models import AIModel, CheckResult
+from checks.models import Check
+from models import AIModel as DomainModel
+from models import CheckResult
 from models.provider import STATUS_AVAILABLE, count_working
 from openrouter import fetch_providers
 
+from .models import FREE_SUFFIX, AIModel
+
 HISTORY_LIMIT = 10
 
+# Ключ из ?sort= → подпись и поля order_by(). Пользовательское значение
+# в order_by() не передаётся: неизвестный ключ заменяется на "".
 SORT_OPTIONS = {
-    "": "как добавлены",
-    "name": "по названию",
-    "uptime": "по аптайму",
+    "": ("как добавлены", ("id",)),
+    "name": ("по названию", (Lower("name"), "id")),
+    "uptime": (
+        "по аптайму",
+        (F("last_uptime").desc(nulls_last=True), "id"),
+    ),
 }
 
-# Отслеживаемые модели с последней проверкой. Поиск, фильтр бесплатных
-# и порядок сортировки задаются параметрами, текст запроса не меняется.
-MODELS_SQL = """
-    SELECT
-        models.openrouter_id,
-        models.name,
-        models.openrouter_id LIKE '%:free' AS is_free,
-        checks.status,
-        checks.uptime,
-        checks.checked_at
-    FROM models
-    LEFT JOIN checks
-        ON checks.id = (
-            SELECT MAX(last.id)
-            FROM checks AS last
-            WHERE last.model_id = models.id
-        )
-    WHERE models.is_tracked = 1
-      AND (:query = ''
-           OR models.openrouter_id LIKE :pattern ESCAPE '\\'
-           OR models.name LIKE :pattern ESCAPE '\\')
-      AND (:free_only = 0 OR models.openrouter_id LIKE '%:free')
-    ORDER BY
-        CASE WHEN :sort = 'uptime' THEN checks.uptime IS NULL END,
-        CASE WHEN :sort = 'uptime' THEN checks.uptime END DESC,
-        CASE WHEN :sort = 'name' THEN models.name END COLLATE NOCASE,
-        models.id
-"""
 
-MODEL_SQL = """
-    SELECT
-        models.openrouter_id,
-        models.name,
-        models.is_tracked,
-        models.openrouter_id LIKE '%:free' AS is_free,
-        vendors.name AS vendor_name
-    FROM models
-    JOIN vendors
-        ON models.vendor_id = vendors.id
-    WHERE models.openrouter_id = ?
-"""
+def with_last_check(models):
+    """Добавить к моделям статус, аптайм и время последней проверки.
 
-MODEL_SUMMARY_SQL = """
-    SELECT
-        COUNT(*) AS checks_count,
-        ROUND(100.0 * SUM(checks.status = ?) / COUNT(*), 1) AS percent,
-        AVG(checks.uptime) AS avg_uptime
-    FROM checks
-    JOIN models
-        ON checks.model_id = models.id
-    WHERE models.openrouter_id = ?
-"""
-
-MODEL_HISTORY_SQL = """
-    SELECT
-        checks.checked_at,
-        checks.status,
-        checks.uptime
-    FROM checks
-    JOIN models
-        ON checks.model_id = models.id
-    WHERE models.openrouter_id = ?
-    ORDER BY checks.id DESC
-    LIMIT ?
-"""
-
-
-def like_pattern(text: str) -> str:
-    """Шаблон LIKE «содержит text»: % и _ из запроса ищутся буквально."""
-    for char in ("\\", "%", "_"):
-        text = text.replace(char, "\\" + char)
-    return f"%{text}%"
+    Подзапрос выбирает самую новую проверку каждой модели (OuterRef —
+    ссылка на модель из внешнего запроса). Модели без проверок остаются
+    в списке со значениями None.
+    """
+    last = Check.objects.filter(model=OuterRef("pk")).order_by(
+        "-checked_at", "-id"
+    )
+    return models.annotate(
+        last_status=Subquery(last.values("status")[:1]),
+        last_uptime=Subquery(last.values("uptime")[:1]),
+        last_checked_at=Subquery(last.values("checked_at")[:1]),
+    )
 
 
 def models_list(request):
@@ -101,20 +55,39 @@ def models_list(request):
     query = request.GET.get("q", "").strip()
     free_only = request.GET.get("free") == "1"
 
-    models = fetch_all(MODELS_SQL, {
-        "query": query,
-        "pattern": like_pattern(query),
-        "free_only": int(free_only),
-        "sort": sort,
-    })
+    models = with_last_check(AIModel.objects.filter(is_tracked=True))
+    if query:
+        models = models.filter(
+            Q(name__icontains=query) | Q(openrouter_id__icontains=query)
+        )
+    if free_only:
+        models = models.filter(openrouter_id__endswith=FREE_SUFFIX)
+    models = models.order_by(*SORT_OPTIONS[sort][1])
+
     context = {
         "models": models,
         "sort": sort,
-        "sort_options": SORT_OPTIONS,
+        "sort_options": {
+            key: label for key, (label, _) in SORT_OPTIONS.items()
+        },
         "query": query,
         "free_only": free_only,
     }
     return render(request, "watchlist/model_list.html", context)
+
+
+def model_summary(model: AIModel) -> dict:
+    """Сводка по проверкам модели: число, доля успешных, средний аптайм."""
+    summary = model.checks.aggregate(
+        checks_count=Count("id"),
+        available_count=Count("id", filter=Q(status=STATUS_AVAILABLE)),
+        avg_uptime=Avg("uptime"),
+    )
+    if summary["checks_count"]:
+        summary["percent"] = (
+            100 * summary["available_count"] / summary["checks_count"]
+        )
+    return summary
 
 
 def model_detail(request, model_id):
@@ -123,26 +96,28 @@ def model_detail(request, model_id):
     Статус запрашивается у OpenRouter при открытии страницы, но в историю
     не записывается: GET-запрос не должен изменять данные приложения.
     """
-    model = fetch_one(MODEL_SQL, [model_id])
-    context = {"model": model, "model_id": model_id}
-
-    if model is not None:
-        ai_model = AIModel(model["openrouter_id"], model["name"])
-        result = CheckResult.from_providers(
-            ai_model, fetch_providers(ai_model.id)
+    try:
+        model = AIModel.objects.select_related("vendor").get(
+            openrouter_id=model_id
         )
-        context.update({
-            "result": result,
-            "working": count_working(result.providers),
-            "summary": fetch_one(
-                MODEL_SUMMARY_SQL, [STATUS_AVAILABLE, model_id]
-            ),
-            "history": fetch_all(MODEL_HISTORY_SQL, [model_id, HISTORY_LIMIT]),
-        })
+    except AIModel.DoesNotExist:
+        context = {"model": None, "model_id": model_id}
+        return render(
+            request, "watchlist/model_detail.html", context, status=404
+        )
 
-    return render(
-        request,
-        "watchlist/model_detail.html",
-        context,
-        status=404 if model is None else 200,
+    domain_model = DomainModel(model.openrouter_id, model.name)
+    result = CheckResult.from_providers(
+        domain_model, fetch_providers(domain_model.id)
     )
+    context = {
+        "model": model,
+        "model_id": model_id,
+        "result": result,
+        "working": count_working(result.providers),
+        "summary": model_summary(model),
+        "history": model.checks.order_by("-checked_at", "-id")[
+            :HISTORY_LIMIT
+        ],
+    }
+    return render(request, "watchlist/model_detail.html", context)

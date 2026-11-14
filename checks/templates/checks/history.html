@@ -5,12 +5,19 @@
 {% block content %}
     <h1>История проверок</h1>
 
+    {% for error in errors %}
+        <div class="alert alert-warning">{{ error }} Фильтр не применён.</div>
+    {% endfor %}
+
     <form method="get" class="row g-2 align-items-center mb-3">
+        <input type="hidden" name="sort" value="{{ sort }}">
         <div class="col-auto">
             <select name="day" class="form-select" aria-label="День проверки">
                 <option value="">все дни</option>
                 {% for item in days %}
-                    <option value="{{ item.day }}" {% if item.day == day %}selected{% endif %}>{{ item.day }}</option>
+                    {% with value=item|date:"Y-m-d" %}
+                        <option value="{{ value }}" {% if value == day %}selected{% endif %}>{{ value }}</option>
+                    {% endwith %}
                 {% endfor %}
             </select>
         </div>
@@ -25,16 +32,45 @@
             </select>
         </div>
         <div class="col-auto">
+            <select name="vendor" class="form-select" aria-label="Разработчик">
+                <option value="">все разработчики</option>
+                {% for item in vendors %}
+                    <option value="{{ item.slug }}" {% if item.slug == vendor %}selected{% endif %}>{{ item.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-sm-4 col-lg-3">
+            <input
+                type="search"
+                name="q"
+                value="{{ query }}"
+                class="form-control"
+                placeholder="Модель: название или id"
+                aria-label="Поиск модели"
+            >
+        </div>
+        <div class="col-auto">
             <button type="submit" class="btn btn-primary">Показать</button>
-            {% if day or status %}
+            {% if filtered %}
                 <a href="{% url 'checks:history' %}" class="btn btn-link">сбросить</a>
             {% endif %}
         </div>
     </form>
 
+    <div class="btn-group mb-3">
+        {% for key, label in sort_options.items %}
+            <a
+                href="{% querystring sort=key page=None %}"
+                class="btn btn-sm {% if key == sort %}btn-dark{% else %}btn-outline-dark{% endif %}"
+            >{{ label }}</a>
+        {% endfor %}
+    </div>
+
     <p class="text-muted">
-        {% if day or status %}Найдено{% else %}Всего{% endif %} проверок: {{ total }}.
-        Показаны последние {{ results|length }}.
+        {% if filtered %}Найдено{% else %}Всего{% endif %} проверок: {{ page.paginator.count }}.
+        {% if page.paginator.num_pages > 1 %}
+            Страница {{ page.number }} из {{ page.paginator.num_pages }}.
+        {% endif %}
     </p>
 
     <div class="table-responsive">
@@ -43,31 +79,33 @@
                 <tr>
                     <th>Время</th>
                     <th>Модель</th>
+                    <th>Разработчик</th>
                     <th>Статус</th>
                     <th>Аптайм</th>
                 </tr>
             </thead>
             <tbody>
-                {% for result in results %}
+                {% for check in page %}
                     <tr>
-                        <td>{{ result.checked_at }}</td>
+                        <td>{{ check.checked_at|date:"Y-m-d H:i" }}</td>
                         <td>
-                            <a href="{% url 'watchlist:detail' result.openrouter_id %}">
-                                {{ result.model_name|truncatechars:40 }}
+                            <a href="{% url 'watchlist:detail' check.model.openrouter_id %}">
+                                {{ check.model.name|truncatechars:40 }}
                             </a>
                         </td>
-                        <td>{% include "includes/status_badge.html" with status=result.status %}</td>
-                        <td>{% include "includes/uptime.html" with value=result.uptime %}</td>
+                        <td>{{ check.model.vendor.name }}</td>
+                        <td>{% include "includes/status_badge.html" with status=check.status %}</td>
+                        <td>{% include "includes/uptime.html" with value=check.uptime %}</td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="4">
-                            {% if day or status %}
+                        <td colspan="5">
+                            {% if filtered %}
                                 Проверок с выбранными условиями нет.
                             {% else %}
                                 История пуста. Проверьте модели в консольной версии
                                 (python main.py, пункт 1) и перенесите данные
-                                в базу: python -m db.import_json.
+                                в базу: python manage.py import_json.
                             {% endif %}
                         </td>
                     </tr>
@@ -75,4 +113,8 @@
             </tbody>
         </table>
     </div>
+
+    {% if page.paginator.num_pages > 1 %}
+        {% include "includes/pagination.html" %}
+    {% endif %}
 {% endblock %}

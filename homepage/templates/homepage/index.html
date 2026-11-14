@@ -28,7 +28,7 @@
         <div class="col">
             <div class="card stat-card h-100"><div class="card-body">
                 <p class="stat-label mb-1">Последняя проверка</p>
-                <p class="h5 mb-0">{{ summary.last_checked_at|default:"ещё не было" }}</p>
+                <p class="h5 mb-0">{{ summary.last_checked_at|date:"Y-m-d H:i"|default:"ещё не было" }}</p>
             </div></div>
         </div>
     </div>
