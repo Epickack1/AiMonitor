@@ -89,11 +89,11 @@
                     <tr>
                         <td>{{ check.checked_at|date:"Y-m-d H:i" }}</td>
                         <td>
-                            <a href="{% url 'watchlist:detail' check.model.openrouter_id %}">
-                                {{ check.model.name|truncatechars:40 }}
+                            <a href="{% url 'watchlist:detail' check.openrouter_id %}">
+                                {{ check.model_name|truncatechars:40 }}
                             </a>
                         </td>
-                        <td>{{ check.model.vendor.name }}</td>
+                        <td>{{ check.vendor_name }}</td>
                         <td>{% include "includes/status_badge.html" with status=check.status %}</td>
                         <td>{% include "includes/uptime.html" with value=check.uptime %}</td>
                     </tr>

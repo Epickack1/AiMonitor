@@ -222,7 +222,7 @@ def test_history_filter_by_day_and_status(client):
     response = client.get(f"/checks/?day=2026-09-26&status={STATUS_DOWN}")
     page = response.context["page"]
     assert page.paginator.count == 1
-    assert page[0].model.name == "Google: Gemma (free)"
+    assert page[0]["model_name"] == "Google: Gemma (free)"
     assert "Найдено проверок: 1" in response.content.decode()
 
 

@@ -6,7 +6,8 @@
 
 from django.db.models import Avg, Count, F, OuterRef, Q, Subquery
 from django.db.models.functions import Lower
-from django.shortcuts import render
+from django.http import Http404
+from django.shortcuts import get_object_or_404, render
 
 from checks.models import Check
 from models import AIModel as DomainModel
@@ -96,11 +97,14 @@ def model_detail(request, model_id):
     Статус запрашивается у OpenRouter при открытии страницы, но в историю
     не записывается: GET-запрос не должен изменять данные приложения.
     """
+    # get_object_or_404() вызывает get(), а при отсутствии записи вместо
+    # DoesNotExist поднимает Http404. Исключение перехватывается, чтобы
+    # показать свою страницу «Модель не найдена» с кодом 404.
     try:
-        model = AIModel.objects.select_related("vendor").get(
-            openrouter_id=model_id
+        model = get_object_or_404(
+            AIModel.objects.select_related("vendor"), openrouter_id=model_id
         )
-    except AIModel.DoesNotExist:
+    except Http404:
         context = {"model": None, "model_id": model_id}
         return render(
             request, "watchlist/model_detail.html", context, status=404

@@ -59,7 +59,7 @@ def page(url):
 
 
 def names(response):
-    return [check.model.openrouter_id for check in response.context["page"]]
+    return [row["openrouter_id"] for row in response.context["page"]]
 
 
 def test_import_json(data):
@@ -105,11 +105,25 @@ def test_wrong_field_path(data):
         Check.objects.filter(name="x").count()
 
 
-def test_history_loads_related_models_in_one_query(data):
+def test_history_rows_with_related_names_in_one_query(data):
+    found, _, _ = checks.views.filter_checks({"vendor": "google"})
     with CaptureQueriesContext(connection) as queries:
-        found, _, _ = checks.views.filter_checks({})
-        vendors = [check.model.vendor.name for check in found]
-    assert len(vendors) == 5
+        rows = list(checks.views.history_rows(found))
+    assert len(queries) == 1
+    assert "JOIN" in queries[0]["sql"]
+    assert set(rows[0]) == {
+        "checked_at", "status", "uptime",
+        "model_name", "openrouter_id", "vendor_name",
+    }
+    assert {row["vendor_name"] for row in rows} == {"Google"}
+
+
+def test_model_detail_loads_vendor_in_one_query(data):
+    with CaptureQueriesContext(connection) as queries:
+        model = AIModel.objects.select_related("vendor").get(
+            openrouter_id="openai/gpt-4o-mini"
+        )
+        assert model.vendor.name == "OpenAI"
     assert len(queries) == 1
 
 
@@ -148,16 +162,16 @@ def test_history_invalid_status(data):
 
 
 def test_history_sort(data):
-    new = [check.checked_at for check in page("/checks/").context["page"]]
-    old = [check.checked_at
-           for check in page("/checks/?sort=old").context["page"]]
+    new = [row["checked_at"] for row in page("/checks/").context["page"]]
+    old = [row["checked_at"]
+           for row in page("/checks/?sort=old").context["page"]]
     assert new == sorted(new, reverse=True)
     assert old == sorted(old)
 
 
 def test_history_sort_uptime_nulls_last(data):
     response = page("/checks/?sort=uptime")
-    uptimes = [check.uptime for check in response.context["page"]]
+    uptimes = [row["uptime"] for row in response.context["page"]]
     assert uptimes == [100.0, 99.0, 90.0, None, None]
 
 
@@ -183,7 +197,7 @@ def test_pagination_keeps_filters(data, monkeypatch):
     assert (current.number, current.paginator.num_pages) == (1, 3)
     assert "?sort=old&amp;page=2" in response.content.decode()
     last = page("/checks/?sort=old&page=3").context["page"]
-    assert [check.uptime for check in last] == [None]
+    assert [row["uptime"] for row in last] == [None]
 
 
 def test_pagination_wrong_page_number(data, monkeypatch):

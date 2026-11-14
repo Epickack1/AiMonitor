@@ -49,7 +49,7 @@ def filter_checks(params) -> tuple:
     набор проверок, ошибки и очищенные значения фильтров.
     """
     errors = []
-    checks = Check.objects.select_related("model", "model__vendor")
+    checks = Check.objects.all()
 
     # Дата: строка ГГГГ-ММ-ДД → datetime.date
     day = params.get("day", "").strip()
@@ -95,6 +95,23 @@ def filter_checks(params) -> tuple:
     return checks, errors, filters
 
 
+def history_rows(checks):
+    """Строки таблицы истории: поля проверки и названия из связанных таблиц.
+
+    annotate() с F() берёт названия модели и разработчика через JOIN,
+    values() возвращает словари только с нужными полями. Объекты AIModel
+    и Vendor не создаются, поэтому select_related() здесь не нужен.
+    """
+    return checks.annotate(
+        model_name=F("model__name"),
+        openrouter_id=F("model__openrouter_id"),
+        vendor_name=F("model__vendor__name"),
+    ).values(
+        "checked_at", "status", "uptime",
+        "model_name", "openrouter_id", "vendor_name",
+    )
+
+
 def history(request):
     """Страница /checks/: проверки с фильтрами, сортировкой и страницами.
 
@@ -103,7 +120,8 @@ def history(request):
     а слишком большой — на последнюю.
     """
     checks, errors, filters = filter_checks(request.GET)
-    page = Paginator(checks, PAGE_SIZE).get_page(request.GET.get("page"))
+    rows = history_rows(checks)
+    page = Paginator(rows, PAGE_SIZE).get_page(request.GET.get("page"))
 
     days = (
         Check.objects.annotate(day=TruncDate("checked_at"))
