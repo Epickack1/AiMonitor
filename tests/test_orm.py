@@ -5,7 +5,11 @@
 не зависят от данных проекта.
 """
 
+import datetime
+import importlib
+
 import pytest
+from django.apps import apps as django_apps
 from django.core.exceptions import FieldError
 from django.db import connection
 from django.db.models import ProtectedError
@@ -26,6 +30,8 @@ from models import CheckResult
 from models.provider import STATUS_AVAILABLE, STATUS_NOT_FOUND
 from storage import save_history, save_watchlist
 from watchlist.models import AIModel, Vendor
+
+AVAILABLE = Check.Status.AVAILABLE
 
 
 @pytest.fixture(scope="module")
@@ -113,7 +119,7 @@ def test_history_rows_with_related_names_in_one_query(data):
     assert "JOIN" in queries[0]["sql"]
     assert set(rows[0]) == {
         "checked_at", "status", "uptime",
-        "model_name", "openrouter_id", "vendor_name",
+        "model_name", "openrouter_id", "vendor_name", "vendor_slug",
     }
     assert {row["vendor_name"] for row in rows} == {"Google"}
 
@@ -138,7 +144,7 @@ def test_history_several_filters(data):
     response = page("/checks/?day=2026-09-26")
     assert response.context["page"].paginator.count == 2
     response = page(
-        f"/checks/?day=2026-09-27&status={STATUS_AVAILABLE}&vendor=google"
+        f"/checks/?day=2026-09-27&status={AVAILABLE}&vendor=google"
     )
     assert names(response) == ["google/gemma:free"]
 
@@ -149,7 +155,7 @@ def test_history_search_by_model(data):
 
 
 def test_history_invalid_date(data):
-    response = page(f"/checks/?day=2026-13-45&status={STATUS_AVAILABLE}")
+    response = page(f"/checks/?day=2026-13-45&status={AVAILABLE}")
     assert len(response.context["errors"]) == 1
     assert "Некорректная дата" in response.content.decode()
     assert response.context["page"].paginator.count == 4
@@ -184,7 +190,7 @@ def test_history_days_and_statuses(data):
     days = [day.isoformat() for day in response.context["days"]]
     assert days == ["2026-09-27", "2026-09-26", "2026-09-25"]
     statuses = list(response.context["statuses"])
-    assert statuses[0] == {"status": STATUS_AVAILABLE, "checks_count": 4}
+    assert statuses[0] == {"status": AVAILABLE, "checks_count": 4}
 
 
 def test_pagination_keeps_filters(data, monkeypatch):
@@ -224,3 +230,97 @@ def test_import_pr7_keeps_ids_and_relations(data, tmp_path):
     assert gpt.vendor.slug == "openai"
     assert gpt.checks.count() == 2
     assert not AIModel.objects.get(openrouter_id="old/model").is_tracked
+
+
+def test_queryset_methods(data):
+    day = datetime.date(2026, 9, 27)
+    assert Check.objects.available().count() == 4
+    assert Check.objects.failed().count() == 1
+    assert Check.objects.for_date(day).count() == 2
+    assert Check.objects.for_date(day).available().count() == 2
+    assert Check.objects.for_vendor("google").failed().count() == 1
+
+
+def test_status_labels(data):
+    check = Check.objects.failed().get()
+    assert check.status == Check.Status.NOT_FOUND
+    assert check.get_status_display() == STATUS_NOT_FOUND
+
+
+def test_status_migration_converts_labels(data):
+    migration = importlib.import_module(
+        "checks.migrations.0002_status_textchoices"
+    )
+    check = Check.objects.failed().get()
+    Check.objects.filter(pk=check.pk).update(status=STATUS_NOT_FOUND)
+    migration.labels_to_codes(django_apps, None)
+    check.refresh_from_db()
+    assert check.status == Check.Status.NOT_FOUND
+    migration.codes_to_labels(django_apps, None)
+    check.refresh_from_db()
+    assert check.status == STATUS_NOT_FOUND
+    migration.labels_to_codes(django_apps, None)
+
+
+def test_generated_field_is_free(data):
+    model = AIModel.objects.get(openrouter_id="google/gemma:free")
+    assert model.is_free is True
+    model.openrouter_id = "google/gemma"
+    model.save()
+    assert model.is_free is True          # в памяти — старое значение
+    model.refresh_from_db()
+    assert model.is_free is False         # база пересчитала столбец
+    model.openrouter_id = "google/gemma:free"
+    model.save()
+    assert AIModel.objects.filter(is_free=True).count() == 1
+
+
+def test_get_absolute_url(data):
+    gpt = AIModel.objects.get(openrouter_id="openai/gpt-4o-mini")
+    assert gpt.get_absolute_url() == "/models/openai/gpt-4o-mini/"
+    assert gpt.vendor.get_absolute_url() == "/vendors/openai/"
+
+
+def test_vendor_page(data):
+    response = page("/vendors/google/")
+    assert response.context["vendor"].name == "Google"
+    assert [m.openrouter_id for m in response.context["models"]] == [
+        "google/gemma:free"
+    ]
+    assert response.context["summary"]["checks_count"] == 2
+    assert Client().get("/vendors/nobody/").status_code == 404
+
+
+def test_models_without_success_on_day(data):
+    response = page("/models/?problem_day=2026-09-26")
+    ids = [m.openrouter_id for m in response.context["models"]]
+    assert ids == ["google/gemma:free"]
+    gemma_check = Check.objects.for_date(
+        datetime.date(2026, 9, 27)).get(model__openrouter_id__endswith="free")
+    gemma_check.status = Check.Status.DOWN
+    gemma_check.save()
+    try:
+        response = page("/models/?problem_day=2026-09-27")
+        assert [m.openrouter_id for m in response.context["models"]] == [
+            "google/gemma:free"
+        ]
+    finally:
+        gemma_check.status = Check.Status.AVAILABLE
+        gemma_check.save()
+    assert list(page("/models/?problem_day=2026-09-27").context["models"]) \
+        == []
+
+
+def test_models_problem_day_invalid(data):
+    response = page("/models/?problem_day=2026-02-30")
+    assert "Некорректная дата" in response.context["errors"][0]
+    assert len(response.context["models"]) == 2
+
+
+def test_stats_totals_by_status(data):
+    totals = {status: count
+              for status, _, count in page("/checks/stats/").context["totals"]}
+    assert totals == {
+        Check.Status.AVAILABLE: 4, Check.Status.UNSTABLE: 0,
+        Check.Status.DOWN: 0, Check.Status.NOT_FOUND: 1,
+    }

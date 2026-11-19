@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load checks_extras %}
 
 {% block title %}История проверок – AIMonitor{% endblock %}
 
@@ -26,7 +27,7 @@
                 <option value="">любой статус</option>
                 {% for item in statuses %}
                     <option value="{{ item.status }}" {% if item.status == status %}selected{% endif %}>
-                        {{ item.status }} ({{ item.checks_count }})
+                        {{ item.status|status_label }} ({{ item.checks_count }})
                     </option>
                 {% endfor %}
             </select>
@@ -93,7 +94,7 @@
                                 {{ check.model_name|truncatechars:40 }}
                             </a>
                         </td>
-                        <td>{{ check.vendor_name }}</td>
+                        <td><a href="{% url 'vendors:detail' check.vendor_slug %}">{{ check.vendor_name }}</a></td>
                         <td>{% include "includes/status_badge.html" with status=check.status %}</td>
                         <td>{% include "includes/uptime.html" with value=check.uptime %}</td>
                     </tr>

@@ -1,21 +1,23 @@
-"""Страницы отслеживаемых моделей: список и подробная информация.
+"""Страницы отслеживаемых моделей и разработчиков.
 
 Данные читаются из моделей Django через ORM, текущее состояние
 провайдеров — из OpenRouter.
 """
+
+import datetime
 
 from django.db.models import Avg, Count, F, OuterRef, Q, Subquery
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 
-from checks.models import Check
+from checks.models import STATUS_BY_LABEL, Check
 from models import AIModel as DomainModel
 from models import CheckResult
-from models.provider import STATUS_AVAILABLE, count_working
+from models.provider import count_working
 from openrouter import fetch_providers
 
-from .models import FREE_SUFFIX, AIModel
+from .models import AIModel, Vendor
 
 HISTORY_LIMIT = 10
 
@@ -48,13 +50,27 @@ def with_last_check(models):
     )
 
 
+def without_success_on(models, day: datetime.date):
+    """Модели, у которых за день не было ни одной успешной проверки.
+
+    Сначала выбираются id моделей с успешными проверками за день,
+    затем эти модели исключаются: модель, которая не проверялась
+    или проверялась неуспешно, остаётся в списке.
+    """
+    available_ids = (
+        Check.objects.for_date(day).available().values("model_id")
+    )
+    return models.exclude(id__in=available_ids)
+
+
 def models_list(request):
-    """Страница /models/: поиск, фильтр и сортировка моделей."""
+    """Страница /models/: поиск, фильтры и сортировка моделей."""
     sort = request.GET.get("sort", "")
     if sort not in SORT_OPTIONS:
         sort = ""
     query = request.GET.get("q", "").strip()
     free_only = request.GET.get("free") == "1"
+    errors = []
 
     models = with_last_check(AIModel.objects.filter(is_tracked=True))
     if query:
@@ -62,7 +78,20 @@ def models_list(request):
             Q(name__icontains=query) | Q(openrouter_id__icontains=query)
         )
     if free_only:
-        models = models.filter(openrouter_id__endswith=FREE_SUFFIX)
+        models = models.filter(is_free=True)
+
+    # Проблемы за день: строка ГГГГ-ММ-ДД → datetime.date
+    problem_day = request.GET.get("problem_day", "").strip()
+    if problem_day:
+        try:
+            models = without_success_on(
+                models, datetime.date.fromisoformat(problem_day)
+            )
+        except ValueError:
+            errors.append(
+                f"Некорректная дата «{problem_day}»: нужен формат "
+                "ГГГГ-ММ-ДД."
+            )
     models = models.order_by(*SORT_OPTIONS[sort][1])
 
     context = {
@@ -73,15 +102,19 @@ def models_list(request):
         },
         "query": query,
         "free_only": free_only,
+        "problem_day": problem_day,
+        "errors": errors,
     }
     return render(request, "watchlist/model_list.html", context)
 
 
-def model_summary(model: AIModel) -> dict:
-    """Сводка по проверкам модели: число, доля успешных, средний аптайм."""
-    summary = model.checks.aggregate(
+def checks_summary(checks) -> dict:
+    """Сводка по набору проверок: число, доля успешных, средний аптайм."""
+    summary = checks.aggregate(
         checks_count=Count("id"),
-        available_count=Count("id", filter=Q(status=STATUS_AVAILABLE)),
+        available_count=Count(
+            "id", filter=Q(status=Check.Status.AVAILABLE)
+        ),
         avg_uptime=Avg("uptime"),
     )
     if summary["checks_count"]:
@@ -118,10 +151,25 @@ def model_detail(request, model_id):
         "model": model,
         "model_id": model_id,
         "result": result,
+        # Статус консольной версии («Доступна») → код Check.Status
+        "current_status": STATUS_BY_LABEL.get(result.status),
         "working": count_working(result.providers),
-        "summary": model_summary(model),
+        "summary": checks_summary(model.checks.all()),
         "history": model.checks.order_by("-checked_at", "-id")[
             :HISTORY_LIMIT
         ],
     }
     return render(request, "watchlist/model_detail.html", context)
+
+
+def vendor_detail(request, slug):
+    """Страница /vendors/<slug>/: модели разработчика и сводка проверок."""
+    vendor = get_object_or_404(Vendor, slug=slug)
+    context = {
+        "vendor": vendor,
+        "models": with_last_check(
+            vendor.models.filter(is_tracked=True)
+        ).order_by("id"),
+        "summary": checks_summary(Check.objects.for_vendor(slug)),
+    }
+    return render(request, "watchlist/vendor_detail.html", context)

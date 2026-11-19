@@ -1,6 +1,6 @@
 <tr>
     <td>
-        <a href="{% url 'watchlist:detail' model.openrouter_id %}">{{ model.name|default:model.openrouter_id }}</a>
+        <a href="{{ model.get_absolute_url }}">{{ model.name|default:model.openrouter_id }}</a>
         {% if model.is_free %}<span class="badge bg-info text-dark">free</span>{% endif %}
     </td>
     <td>

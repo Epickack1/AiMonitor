@@ -16,7 +16,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from checks.management.commands.import_json import parse_time
-from checks.models import Check
+from checks.models import STATUS_BY_LABEL, Check
 from db.database import DB_PATH, get_connection
 from watchlist.models import AIModel, Vendor
 
@@ -70,7 +70,8 @@ def import_pr7(source: Path = DB_PATH) -> tuple[int, int, int]:
         Check(
             id=row["id"],
             model_id=row["model_id"],
-            status=row["status"],
+            # В базе ПР7 статус хранится подписью («Доступна»)
+            status=STATUS_BY_LABEL[row["status"]],
             uptime=row["uptime"],
             checked_at=parse_time(row["checked_at"]),
         )

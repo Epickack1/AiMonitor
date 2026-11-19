@@ -19,6 +19,8 @@ from storage import save_history, save_watchlist
 from watchlist.models import AIModel as AIModelRecord
 from watchlist.models import Vendor
 
+from checks.models import Check
+
 
 @pytest.fixture(scope="module")
 def database(tmp_path_factory):
@@ -104,7 +106,7 @@ def test_models_list_shows_last_check(client):
     first = response.context["models"][0]
     assert first.openrouter_id == "openai/gpt-4o-mini"
     assert first.last_uptime == 100.0
-    assert first.last_status == STATUS_AVAILABLE
+    assert first.last_status == Check.Status.AVAILABLE
     assert "2026-09-27 11:00" in response.content.decode()
     assert template_names(response).count(
         "watchlist/includes/model_row.html"
@@ -161,7 +163,8 @@ def test_model_detail(client):
     assert "Azure" in text
     assert "Проверок: 2" in text
     assert response.context["summary"]["percent"] == 100
-    assert "Разработчик:</strong> OpenAI" in text
+    assert ('Разработчик:</strong> <a href="/vendors/openai/">OpenAI</a>'
+            in text)
     history = response.context["history"]
     assert [check.uptime for check in history] == [100.0, 99.0]
     assert text.index("2026-09-27 11:00") < text.index("2026-09-26 10:00")
@@ -219,7 +222,9 @@ def test_history_newest_first(client):
 
 
 def test_history_filter_by_day_and_status(client):
-    response = client.get(f"/checks/?day=2026-09-26&status={STATUS_DOWN}")
+    response = client.get(
+        f"/checks/?day=2026-09-26&status={Check.Status.DOWN}"
+    )
     page = response.context["page"]
     assert page.paginator.count == 1
     assert page[0]["model_name"] == "Google: Gemma (free)"
@@ -253,7 +258,7 @@ def test_stats(client):
     ]
     statuses = {row["status"]: row["checks_count"]
                 for row in response.context["status_counts"]}
-    assert statuses == {STATUS_AVAILABLE: 3, STATUS_DOWN: 1}
+    assert statuses == {Check.Status.AVAILABLE: 3, Check.Status.DOWN: 1}
     vendors = [(item.name, item.models_count, item.checks_count)
                for item in response.context["vendors"]]
     assert vendors == [("Google", 1, 1), ("OpenAI", 1, 2)]

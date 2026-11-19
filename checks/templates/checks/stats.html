@@ -10,6 +10,18 @@
             Проверок: {{ total }}, моделей: {{ model_stats|length }}.
         </p>
 
+        <div class="row row-cols-2 row-cols-md-4 g-3 mb-4">
+            {% for status, label, count in totals %}
+                <div class="col">
+                    <div class="card stat-card h-100"><div class="card-body">
+                        <p class="stat-label mb-1">{{ label }}</p>
+                        <p class="h3 mb-0">{{ count }}</p>
+                        <p class="text-muted small mb-0">из {{ total }}</p>
+                    </div></div>
+                </div>
+            {% endfor %}
+        </div>
+
         <div class="row row-cols-1 row-cols-md-2 g-3 mb-4">
             {% include "checks/includes/stat_card.html" with label="Самая стабильная" item=model_stats|first border="border-success" %}
             {% if model_stats|length > 1 %}
@@ -77,7 +89,7 @@
                     <tbody>
                         {% for item in vendors %}
                             <tr>
-                                <td>{{ item.name }}</td>
+                                <td><a href="{{ item.get_absolute_url }}">{{ item.name }}</a></td>
                                 <td class="text-end">{{ item.models_count }}</td>
                                 <td class="text-end">{{ item.checks_count }}</td>
                             </tr>

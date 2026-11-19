@@ -6,12 +6,17 @@ python manage.py import_pr7 или из JSON командой python manage.py i
 """
 
 from django.db import models
+from django.db.models import Case, Value, When
+from django.urls import reverse
 
 
 class Vendor(models.Model):
     """Разработчик модели: часть id OpenRouter до «/»."""
 
-    slug = models.CharField("код", max_length=50, unique=True)
+    slug = models.SlugField(
+        "код", max_length=50, unique=True,
+        help_text="часть id OpenRouter до «/», например openai",
+    )
     name = models.CharField("название", max_length=100)
 
     class Meta:
@@ -21,6 +26,10 @@ class Vendor(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    def get_absolute_url(self) -> str:
+        """Адрес страницы разработчика по именованному маршруту."""
+        return reverse("vendors:detail", kwargs={"slug": self.slug})
 
 
 FREE_SUFFIX = ":free"
@@ -39,6 +48,18 @@ class AIModel(models.Model):
         verbose_name="разработчик",
     )
     is_tracked = models.BooleanField("отслеживается", default=True)
+    # Вычисляемый столбец: значение считает база данных при каждой записи
+    # строки, приложение его не задаёт. db_persist=True — значение
+    # хранится в таблице (STORED), а не вычисляется при каждом чтении.
+    is_free = models.GeneratedField(
+        expression=Case(
+            When(openrouter_id__endswith=FREE_SUFFIX, then=Value(True)),
+            default=Value(False),
+        ),
+        output_field=models.BooleanField(),
+        db_persist=True,
+        verbose_name="бесплатная",
+    )
 
     class Meta:
         verbose_name = "модель ИИ"
@@ -48,7 +69,6 @@ class AIModel(models.Model):
     def __str__(self) -> str:
         return self.name
 
-    @property
-    def is_free(self) -> bool:
-        """Бесплатная модель: id в OpenRouter оканчивается на «:free»."""
-        return self.openrouter_id.endswith(FREE_SUFFIX)
+    def get_absolute_url(self) -> str:
+        """Адрес страницы модели: id OpenRouter с «/» — конвертер path."""
+        return reverse("watchlist:detail", args=[self.openrouter_id])

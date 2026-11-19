@@ -5,6 +5,10 @@
 {% block content %}
     <h1>Отслеживаемые модели</h1>
 
+    {% for error in errors %}
+        <div class="alert alert-warning">{{ error }} Фильтр не применён.</div>
+    {% endfor %}
+
     <form method="get" class="row g-2 align-items-center mb-3">
         <input type="hidden" name="sort" value="{{ sort }}">
         <div class="col-sm-6 col-lg-4">
@@ -29,15 +33,25 @@
             <label for="free" class="form-check-label">только бесплатные</label>
         </div>
         <div class="col-auto">
+            <input
+                type="date"
+                name="problem_day"
+                value="{{ problem_day }}"
+                class="form-control"
+                title="Модели без успешных проверок за этот день"
+                aria-label="Без успешных проверок за день"
+            >
+        </div>
+        <div class="col-auto">
             <button type="submit" class="btn btn-primary">Найти</button>
-            {% if query or free_only %}
+            {% if query or free_only or problem_day %}
                 <a href="{% url 'watchlist:list' %}" class="btn btn-link">сбросить</a>
             {% endif %}
         </div>
     </form>
 
     <p class="text-muted">
-        {% if query or free_only %}Найдено{% else %}Всего{% endif %} моделей: {{ models|length }}
+        {% if query or free_only or problem_day %}Найдено{% else %}Всего{% endif %} моделей: {{ models|length }}{% if problem_day and not errors %} без успешных проверок за {{ problem_day }}{% endif %}
     </p>
 
     <div class="btn-group mb-3">
@@ -65,7 +79,7 @@
                 {% empty %}
                     <tr>
                         <td colspan="4">
-                            {% if query or free_only %}
+                            {% if query or free_only or problem_day %}
                                 Подходящих моделей нет.
                             {% else %}
                                 Список отслеживания пуст.

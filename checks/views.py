@@ -10,14 +10,13 @@ from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Q
 from django.db.models.functions import TruncDate
 from django.shortcuts import render
 
-from models.provider import STATUS_AVAILABLE
 from watchlist.models import AIModel, Vendor
 
-from .models import STATUS_CHOICES, Check
+from .models import Check
 
 PAGE_SIZE = 10
 
-STATUSES = [status for status, _ in STATUS_CHOICES]
+STATUSES = Check.Status.values
 
 # Ключ из ?sort= → подпись и поля order_by(). Префикс «-» — по убыванию,
 # второе поле упорядочивает записи с одинаковым первым.
@@ -55,9 +54,7 @@ def filter_checks(params) -> tuple:
     day = params.get("day", "").strip()
     if day:
         try:
-            checks = checks.filter(
-                checked_at__date=datetime.date.fromisoformat(day)
-            )
+            checks = checks.for_date(datetime.date.fromisoformat(day))
         except ValueError:
             errors.append(
                 f"Некорректная дата «{day}»: нужен формат ГГГГ-ММ-ДД."
@@ -73,7 +70,7 @@ def filter_checks(params) -> tuple:
     # Разработчик: фильтр по полю модели, связанной через model
     vendor = params.get("vendor", "")
     if vendor:
-        checks = checks.filter(model__vendor__slug=vendor)
+        checks = checks.for_vendor(vendor)
 
     # Поиск по названию или id модели (связанная модель AIModel)
     query = params.get("q", "").strip()
@@ -106,9 +103,10 @@ def history_rows(checks):
         model_name=F("model__name"),
         openrouter_id=F("model__openrouter_id"),
         vendor_name=F("model__vendor__name"),
+        vendor_slug=F("model__vendor__slug"),
     ).values(
         "checked_at", "status", "uptime",
-        "model_name", "openrouter_id", "vendor_name",
+        "model_name", "openrouter_id", "vendor_name", "vendor_slug",
     )
 
 
@@ -152,7 +150,7 @@ def stats(request):
         AIModel.objects.annotate(
             checks_count=Count("checks"),
             available_count=Count(
-                "checks", filter=Q(checks__status=STATUS_AVAILABLE)
+                "checks", filter=Q(checks__status=Check.Status.AVAILABLE)
             ),
             avg_uptime=Avg("checks__uptime"),
         )
@@ -183,9 +181,22 @@ def stats(request):
         )
         .order_by("-models_count", "name")
     )
+    # Одна строка итогов: общее число проверок и число с каждым статусом.
+    # Count с filter=Q(...) считает только записи, подходящие под условие.
+    totals = Check.objects.aggregate(
+        total=Count("id"),
+        **{
+            status: Count("id", filter=Q(status=status))
+            for status in Check.Status.values
+        },
+    )
     context = {
         "model_stats": model_stats,
-        "total": Check.objects.count(),
+        "total": totals["total"],
+        "totals": [
+            (status, label, totals[status])
+            for status, label in Check.Status.choices
+        ],
         "problem_models": problem_models,
         "status_counts": status_counts(),
         "vendors": vendors,

@@ -1,9 +1,9 @@
-{% if status == "Доступна" %}
-    <span class="badge bg-success status-badge">{{ status }}</span>
-{% elif status == "Нестабильна" %}
-    <span class="badge bg-warning text-dark status-badge">{{ status }}</span>
-{% elif status == "Недоступна" %}
-    <span class="badge bg-danger status-badge">{{ status }}</span>
+{% load checks_extras %}{% if status == "available" %}
+    <span class="badge bg-success status-badge">{{ status|status_label }}</span>
+{% elif status == "unstable" %}
+    <span class="badge bg-warning text-dark status-badge">{{ status|status_label }}</span>
+{% elif status == "down" %}
+    <span class="badge bg-danger status-badge">{{ status|status_label }}</span>
 {% else %}
-    <span class="badge bg-secondary status-badge">{{ status|default:"нет данных" }}</span>
+    <span class="badge bg-secondary status-badge">{{ status|status_label|default:"нет данных" }}</span>
 {% endif %}

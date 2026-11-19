@@ -13,7 +13,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from checks.models import Check
+from checks.models import STATUS_BY_LABEL, Check
 from db.import_json import vendor_of
 from models.check import TIME_FORMAT
 from storage import DATA_FILE, HISTORY_FILE, load_history, load_watchlist
@@ -71,7 +71,7 @@ def import_data(
     Check.objects.bulk_create(
         Check(
             model=ai_models[result.model.id],
-            status=result.status,
+            status=STATUS_BY_LABEL[result.status],
             uptime=result.uptime,
             checked_at=parse_time(result.checked_at),
         )

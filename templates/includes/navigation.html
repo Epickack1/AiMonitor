@@ -5,16 +5,16 @@
         <a class="navbar-brand" href="{% url 'homepage:index' %}">
             <img
                 src="{% static 'homepage/img/logo.svg' %}"
-                alt="Логотип AIMonitor"
+                alt="Логотип {{ site_name }}"
                 class="aimonitor-logo"
             >
-            AIMonitor
+            {{ site_name }}
         </a>
         <div class="navbar-nav">
             <a
                 class="nav-link{% if section == 'watchlist' %} active{% endif %}"
                 href="{% url 'watchlist:list' %}"
-            >Модели</a>
+            >Модели{% if tracked_models_count is not None %} <span class="badge bg-secondary">{{ tracked_models_count }}</span>{% endif %}</a>
             <a
                 class="nav-link{% if request.resolver_match.view_name == 'checks:history' %} active{% endif %}"
                 href="{% url 'checks:history' %}"

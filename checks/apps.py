@@ -4,3 +4,4 @@ from django.apps import AppConfig
 class ChecksConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'checks'
+    verbose_name = 'Проверки доступности'
