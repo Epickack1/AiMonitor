@@ -8,4 +8,5 @@ app_name = "vendors"
 
 urlpatterns = [
     path("<slug:slug>/", views.vendor_detail, name="detail"),
+    path("<slug:slug>/logo/", views.vendor_logo, name="logo"),
 ]

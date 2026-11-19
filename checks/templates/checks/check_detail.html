@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Проверка {{ check.pk }} – AIMonitor{% endblock %}
+
+{% block content %}
+    <h1>Проверка №{{ check.pk }}</h1>
+    <div class="card mb-4"><div class="card-body">
+        <p class="card-text"><strong>Модель:</strong>
+            <a href="{{ check.model.get_absolute_url }}">{{ check.model.name }}</a>
+        </p>
+        <p class="card-text"><strong>Разработчик:</strong>
+            <a href="{{ check.model.vendor.get_absolute_url }}">{{ check.model.vendor.name }}</a>
+        </p>
+        <p class="card-text"><strong>Время:</strong> {{ check.checked_at|date:"Y-m-d H:i" }}</p>
+        <p class="card-text"><strong>Статус:</strong>
+            {% include "includes/status_badge.html" with status=check.status %}
+        </p>
+        <p class="card-text"><strong>Аптайм:</strong>
+            {% include "includes/uptime.html" with value=check.uptime %}
+        </p>
+    </div></div>
+    <a href="{% url 'checks:edit' check.pk %}" class="btn btn-primary">Изменить</a>
+    <a href="{% url 'checks:history' %}" class="btn btn-outline-secondary">← к истории</a>
+{% endblock %}

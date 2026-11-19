@@ -83,3 +83,12 @@ def test_context_processor_without_tables(admin_client, monkeypatch):
     monkeypatch.setattr(AIModel.objects, "filter", broken)
     context = homepage.context_processors.site(None)
     assert context["tracked_models_count"] is None
+
+
+def test_admin_vendor_has_logo_upload(admin_client):
+    vendor = Vendor.objects.get()
+    text = admin_client.get(
+        f"/admin/watchlist/vendor/{vendor.pk}/change/"
+    ).content.decode()
+    assert 'name="logo"' in text
+    assert 'enctype="multipart/form-data"' in text

@@ -12,5 +12,9 @@ app_name = "watchlist"
 
 urlpatterns = [
     path("", views.models_list, name="list"),
+    # Маршруты действий стоят перед detail: <path:...> принимает и «/»,
+    # поэтому иначе «.../untrack/» попал бы в id модели.
+    path("<path:model_id>/untrack/", views.model_untrack, name="untrack"),
+    path("<path:model_id>/track/", views.model_track, name="track"),
     path("<path:model_id>/", views.model_detail, name="detail"),
 ]

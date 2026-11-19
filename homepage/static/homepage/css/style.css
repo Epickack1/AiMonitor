@@ -54,3 +54,10 @@ main {
     color: #6c757d;
     font-size: 0.9rem;
 }
+
+/* Логотип разработчика (загруженный файл из MEDIA_ROOT) */
+.vendor-logo {
+    max-height: 64px;
+    max-width: 160px;
+    object-fit: contain;
+}

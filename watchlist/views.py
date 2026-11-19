@@ -9,7 +9,9 @@ import datetime
 from django.db.models import Avg, Count, F, OuterRef, Q, Subquery
 from django.db.models.functions import Lower
 from django.http import Http404
-from django.shortcuts import get_object_or_404, render
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from checks.models import STATUS_BY_LABEL, Check
 from models import AIModel as DomainModel
@@ -17,6 +19,7 @@ from models import CheckResult
 from models.provider import count_working
 from openrouter import fetch_providers
 
+from .forms import VendorLogoForm
 from .models import AIModel, Vendor
 
 HISTORY_LIMIT = 10
@@ -173,3 +176,50 @@ def vendor_detail(request, slug):
         "summary": checks_summary(Check.objects.for_vendor(slug)),
     }
     return render(request, "watchlist/vendor_detail.html", context)
+
+
+@require_POST
+def model_untrack(request, model_id):
+    """Убрать модель из отслеживания: только POST-запрос с CSRF-токеном.
+
+    require_POST отвечает 405 на GET-запрос: изменение данных обычной
+    ссылкой (или при предзагрузке страницы браузером) невозможно.
+    """
+    model = get_object_or_404(AIModel, openrouter_id=model_id)
+    model.untrack()
+    messages.success(
+        request, f"Модель «{model.name}» убрана из отслеживания."
+        " История её проверок сохранена."
+    )
+    return redirect(model)
+
+
+@require_POST
+def model_track(request, model_id):
+    """Вернуть модель в отслеживание: только POST-запрос."""
+    model = get_object_or_404(AIModel, openrouter_id=model_id)
+    model.track()
+    messages.success(request, f"Модель «{model.name}» снова отслеживается.")
+    return redirect(model)
+
+
+def vendor_logo(request, slug):
+    """Страница /vendors/<slug>/logo/: загрузка логотипа разработчика.
+
+    Файл приходит в request.FILES, остальные поля — в request.POST,
+    поэтому форма создаётся с обоими. В HTML-форме нужен
+    enctype="multipart/form-data", иначе браузер не передаст файл.
+    """
+    vendor = get_object_or_404(Vendor, slug=slug)
+    if request.method == "POST":
+        form = VendorLogoForm(request.POST, request.FILES, instance=vendor)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Логотип сохранён.")
+            return redirect(vendor)
+    else:
+        form = VendorLogoForm(instance=vendor)
+    return render(
+        request, "watchlist/vendor_logo.html",
+        {"vendor": vendor, "form": form},
+    )

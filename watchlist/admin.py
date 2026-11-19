@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 from django.db.models import Count
+from django.utils.html import format_html
 
 from checks.models import Check
 
@@ -29,7 +30,9 @@ class CheckInline(admin.TabularInline):
 
 @admin.register(Vendor)
 class VendorAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "models_count")
+    list_display = ("name", "slug", "logo_preview", "models_count")
+    readonly_fields = ("logo_preview",)
+    fields = ("name", "slug", "logo", "logo_preview")
     search_fields = ("name", "slug")
     ordering = ("name",)
     prepopulated_fields = {"slug": ("name",)}
@@ -44,6 +47,15 @@ class VendorAdmin(admin.ModelAdmin):
     @admin.display(description="моделей", ordering="models_count")
     def models_count(self, vendor):
         return vendor.models_count
+
+    @admin.display(description="предпросмотр")
+    def logo_preview(self, vendor):
+        """Миниатюра загруженного логотипа; format_html экранирует адрес."""
+        if not vendor.logo:
+            return "—"
+        return format_html(
+            '<img src="{}" alt="" style="max-height: 40px">', vendor.logo.url
+        )
 
 
 @admin.register(AIModel)

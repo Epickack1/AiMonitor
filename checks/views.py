@@ -1,34 +1,20 @@
-"""Страницы истории проверок и статистики доступности моделей.
+"""Страницы истории проверок, статистики и формы проверки.
 
-Данные читаются из моделей Django через ORM.
+Данные читаются из моделей Django через ORM, параметры фильтра
+и данные проверки проверяются формами из checks/forms.py.
 """
 
-import datetime
-
+from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Q
-from django.db.models.functions import TruncDate
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from watchlist.models import AIModel, Vendor
 
+from .forms import SORT_OPTIONS, CheckFilterForm, CheckForm
 from .models import Check
 
 PAGE_SIZE = 10
-
-STATUSES = Check.Status.values
-
-# Ключ из ?sort= → подпись и поля order_by(). Префикс «-» — по убыванию,
-# второе поле упорядочивает записи с одинаковым первым.
-SORT_OPTIONS = {
-    "new": ("сначала новые", ("-checked_at", "-id")),
-    "old": ("сначала старые", ("checked_at", "id")),
-    "model": ("по модели", ("model__name", "-checked_at")),
-    "uptime": (
-        "по аптайму",
-        (F("uptime").desc(nulls_last=True), "-checked_at"),
-    ),
-}
 
 
 def status_counts():
@@ -40,56 +26,30 @@ def status_counts():
     )
 
 
-def filter_checks(params) -> tuple:
-    """Отфильтровать проверки по параметрам адреса.
+def filter_checks(cleaned: dict):
+    """Отфильтровать и упорядочить проверки по проверенным значениям формы.
 
-    Параметры — строки из request.GET. Каждый проверяется; некорректный
-    не применяется, а в список ошибок добавляется сообщение. Возвращает
-    набор проверок, ошибки и очищенные значения фильтров.
+    cleaned — form.cleaned_data: в нём только поля, прошедшие проверку,
+    уже преобразованные в нужные типы (дата — datetime.date, разработчик —
+    объект Vendor). Поле с ошибкой в cleaned_data не попадает, поэтому
+    его фильтр не применяется.
     """
-    errors = []
     checks = Check.objects.all()
-
-    # Дата: строка ГГГГ-ММ-ДД → datetime.date
-    day = params.get("day", "").strip()
-    if day:
-        try:
-            checks = checks.for_date(datetime.date.fromisoformat(day))
-        except ValueError:
-            errors.append(
-                f"Некорректная дата «{day}»: нужен формат ГГГГ-ММ-ДД."
-            )
-
-    # Статус: только из списка допустимых
-    status = params.get("status", "")
-    if status in STATUSES:
-        checks = checks.filter(status=status)
-    elif status:
-        errors.append(f"Неизвестный статус «{status}».")
-
-    # Разработчик: фильтр по полю модели, связанной через model
-    vendor = params.get("vendor", "")
-    if vendor:
-        checks = checks.for_vendor(vendor)
-
-    # Поиск по названию или id модели (связанная модель AIModel)
-    query = params.get("q", "").strip()
+    if cleaned.get("day"):
+        checks = checks.for_date(cleaned["day"])
+    if cleaned.get("status"):
+        checks = checks.filter(status=cleaned["status"])
+    if cleaned.get("vendor"):
+        checks = checks.for_vendor(cleaned["vendor"].slug)
+    query = cleaned.get("q", "").strip()
     if query:
         checks = checks.filter(
             Q(model__name__icontains=query)
             | Q(model__openrouter_id__icontains=query)
         )
-
-    sort = params.get("sort", "new")
-    if sort not in SORT_OPTIONS:
-        sort = "new"
-    checks = checks.order_by(*SORT_OPTIONS[sort][1])
-
-    filters = {
-        "day": day, "status": status, "vendor": vendor,
-        "query": query, "sort": sort,
-    }
-    return checks, errors, filters
+    # Неизвестная сортировка не проходит проверку ChoiceField — «new»
+    sort = cleaned.get("sort") or "new"
+    return checks.order_by(*SORT_OPTIONS[sort][1])
 
 
 def history_rows(checks):
@@ -105,7 +65,7 @@ def history_rows(checks):
         vendor_name=F("model__vendor__name"),
         vendor_slug=F("model__vendor__slug"),
     ).values(
-        "checked_at", "status", "uptime",
+        "id", "checked_at", "status", "uptime",
         "model_name", "openrouter_id", "vendor_name", "vendor_slug",
     )
 
@@ -113,35 +73,77 @@ def history_rows(checks):
 def history(request):
     """Страница /checks/: проверки с фильтрами, сортировкой и страницами.
 
-    Paginator делит результат на страницы по PAGE_SIZE проверок.
+    Форма получает GET-параметры: фильтр не меняет данных, а адрес
+    с параметрами можно сохранить и открыть повторно. is_valid()
+    проверяет и преобразует значения, ошибки остаются в form.errors.
+    Paginator делит результат на страницы по PAGE_SIZE проверок;
     get_page() заменяет некорректный номер страницы на первую,
     а слишком большой — на последнюю.
     """
-    checks, errors, filters = filter_checks(request.GET)
-    rows = history_rows(checks)
-    page = Paginator(rows, PAGE_SIZE).get_page(request.GET.get("page"))
-
-    days = (
-        Check.objects.annotate(day=TruncDate("checked_at"))
-        .values_list("day", flat=True)
-        .distinct()
-        .order_by("-day")
+    form = CheckFilterForm(request.GET)
+    form.is_valid()
+    checks = filter_checks(form.cleaned_data)
+    page = Paginator(history_rows(checks), PAGE_SIZE).get_page(
+        request.GET.get("page")
     )
     context = {
+        "form": form,
         "page": page,
-        "errors": errors,
         "filtered": any(
-            filters[key] for key in ("day", "status", "vendor", "query")
+            form.cleaned_data.get(key)
+            for key in ("day", "status", "vendor", "q")
         ),
-        "days": days,
-        "statuses": status_counts(),
-        "vendors": Vendor.objects.filter(models__isnull=False).distinct(),
+        "sort": form.cleaned_data.get("sort") or "new",
         "sort_options": {
             key: label for key, (label, _) in SORT_OPTIONS.items()
         },
-        **filters,
     }
     return render(request, "checks/history.html", context)
+
+
+def check_detail(request, pk):
+    """Страница /checks/<id>/: одна проверка. Нет записи — ответ 404."""
+    check = get_object_or_404(
+        Check.objects.select_related("model__vendor"), pk=pk
+    )
+    return render(request, "checks/check_detail.html", {"check": check})
+
+
+def check_form(request, check=None):
+    """Общая обработка формы создания и изменения проверки.
+
+    GET — пустая форма или форма с данными проверки (instance).
+    POST — данные из request.POST: при ошибках форма показывается снова
+    с введёнными значениями, при успехе проверка сохраняется
+    и выполняется перенаправление (POST/Redirect/GET), чтобы повторная
+    отправка страницы не создала запись ещё раз.
+    """
+    if request.method == "POST":
+        form = CheckForm(request.POST, instance=check)
+        if form.is_valid():
+            saved = form.save()
+            messages.success(
+                request,
+                "Проверка изменена." if check else "Проверка добавлена.",
+            )
+            return redirect("checks:detail", pk=saved.pk)
+    else:
+        # ?model=<id> со страницы модели — начальное значение поля
+        initial = {} if check else {"model": request.GET.get("model")}
+        form = CheckForm(instance=check, initial=initial)
+    return render(
+        request, "checks/check_form.html", {"form": form, "check": check}
+    )
+
+
+def check_create(request):
+    """Страница /checks/new/: новая проверка."""
+    return check_form(request)
+
+
+def check_edit(request, pk):
+    """Страница /checks/<id>/edit/: изменение существующей проверки."""
+    return check_form(request, get_object_or_404(Check, pk=pk))
 
 
 def stats(request):

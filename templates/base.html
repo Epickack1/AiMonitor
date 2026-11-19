@@ -16,6 +16,9 @@
     {% include "includes/navigation.html" %}
 
     <main class="container mb-5">
+        {% for message in messages %}
+            <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>
+        {% endfor %}
         {% block content %}
         {% endblock %}
     </main>

@@ -6,6 +6,19 @@
     {% if model %}
         {% include "watchlist/includes/model_card.html" %}
 
+        {# Изменение данных — только POST-формой с CSRF-токеном #}
+        <form method="post" class="mb-4"
+              action="{% if model.is_tracked %}{% url 'watchlist:untrack' model.openrouter_id %}{% else %}{% url 'watchlist:track' model.openrouter_id %}{% endif %}">
+            {% csrf_token %}
+            {% if model.is_tracked %}
+                <button type="submit" class="btn btn-outline-danger btn-sm">Убрать из отслеживания</button>
+                <span class="form-text ms-2">История проверок сохранится.</span>
+            {% else %}
+                <button type="submit" class="btn btn-outline-success btn-sm">Вернуть в отслеживание</button>
+            {% endif %}
+            <a href="{% url 'checks:create' %}?model={{ model.pk }}" class="btn btn-outline-primary btn-sm ms-2">+ Добавить проверку</a>
+        </form>
+
         <h2 class="h4">Провайдеры</h2>
         {% if result.providers %}
             <p>Работают {{ working }} из {{ result.providers|length }} провайдеров.</p>

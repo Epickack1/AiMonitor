@@ -112,13 +112,15 @@ def test_wrong_field_path(data):
 
 
 def test_history_rows_with_related_names_in_one_query(data):
-    found, _, _ = checks.views.filter_checks({"vendor": "google"})
+    found = checks.views.filter_checks(
+        {"vendor": Vendor.objects.get(slug="google")}
+    )
     with CaptureQueriesContext(connection) as queries:
         rows = list(checks.views.history_rows(found))
     assert len(queries) == 1
     assert "JOIN" in queries[0]["sql"]
     assert set(rows[0]) == {
-        "checked_at", "status", "uptime",
+        "id", "checked_at", "status", "uptime",
         "model_name", "openrouter_id", "vendor_name", "vendor_slug",
     }
     assert {row["vendor_name"] for row in rows} == {"Google"}
@@ -136,7 +138,7 @@ def test_model_detail_loads_vendor_in_one_query(data):
 def test_history_without_filters(data):
     response = page("/checks/")
     assert response.context["page"].paginator.count == 5
-    assert response.context["errors"] == []
+    assert response.context["form"].errors == {}
     assert "checks/history.html" in [t.name for t in response.templates]
 
 
@@ -156,14 +158,15 @@ def test_history_search_by_model(data):
 
 def test_history_invalid_date(data):
     response = page(f"/checks/?day=2026-13-45&status={AVAILABLE}")
-    assert len(response.context["errors"]) == 1
-    assert "Некорректная дата" in response.content.decode()
+    form = response.context["form"]
+    assert list(form.errors) == ["day"]
+    assert "Введите правильную дату" in response.content.decode()
     assert response.context["page"].paginator.count == 4
 
 
 def test_history_invalid_status(data):
     response = page("/checks/?status=Ошибка")
-    assert "Неизвестный статус" in response.context["errors"][0]
+    assert list(response.context["form"].errors) == ["status"]
     assert response.context["page"].paginator.count == 5
 
 
@@ -185,11 +188,8 @@ def test_history_unknown_sort_ignored(data):
     assert page("/checks/?sort=hack").context["sort"] == "new"
 
 
-def test_history_days_and_statuses(data):
-    response = page("/checks/")
-    days = [day.isoformat() for day in response.context["days"]]
-    assert days == ["2026-09-27", "2026-09-26", "2026-09-25"]
-    statuses = list(response.context["statuses"])
+def test_status_counts(data):
+    statuses = list(checks.views.status_counts())
     assert statuses[0] == {"status": AVAILABLE, "checks_count": 4}
 
 

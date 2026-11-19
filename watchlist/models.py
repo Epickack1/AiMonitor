@@ -9,6 +9,8 @@ from django.db import models
 from django.db.models import Case, Value, When
 from django.urls import reverse
 
+from .validators import validate_logo_size
+
 
 class Vendor(models.Model):
     """Разработчик модели: часть id OpenRouter до «/»."""
@@ -18,6 +20,13 @@ class Vendor(models.Model):
         help_text="часть id OpenRouter до «/», например openai",
     )
     name = models.CharField("название", max_length=100)
+    # Файл хранится в MEDIA_ROOT/vendors/, в базе — только путь к нему.
+    # ImageField проверяет через Pillow, что файл — изображение.
+    logo = models.ImageField(
+        "логотип", upload_to="vendors/", blank=True,
+        validators=[validate_logo_size],
+        help_text="PNG, JPG или GIF, не больше 2 МБ",
+    )
 
     class Meta:
         verbose_name = "разработчик"
@@ -72,3 +81,17 @@ class AIModel(models.Model):
     def get_absolute_url(self) -> str:
         """Адрес страницы модели: id OpenRouter с «/» — конвертер path."""
         return reverse("watchlist:detail", args=[self.openrouter_id])
+
+    def untrack(self) -> None:
+        """Убрать модель из отслеживания. Запись и её проверки остаются.
+
+        В отличие от delete(), строка в таблице не удаляется: история
+        проверок сохраняется, а модель можно вернуть методом track().
+        """
+        self.is_tracked = False
+        self.save(update_fields=["is_tracked"])
+
+    def track(self) -> None:
+        """Вернуть модель в список отслеживания."""
+        self.is_tracked = True
+        self.save(update_fields=["is_tracked"])

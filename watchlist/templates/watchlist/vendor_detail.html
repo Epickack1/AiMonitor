@@ -3,9 +3,15 @@
 {% block title %}{{ vendor.name }} – AIMonitor{% endblock %}
 
 {% block content %}
-    <h1>{{ vendor.name }}</h1>
+    <div class="d-flex align-items-center gap-3 mb-2">
+        {% if vendor.logo %}
+            <img src="{{ vendor.logo.url }}" alt="Логотип {{ vendor.name }}" class="vendor-logo">
+        {% endif %}
+        <h1 class="mb-0">{{ vendor.name }}</h1>
+    </div>
     <p class="text-muted">
-        Разработчик моделей ИИ · код <code>{{ vendor.slug }}</code>
+        Разработчик моделей ИИ · код <code>{{ vendor.slug }}</code> ·
+        <a href="{% url 'vendors:logo' vendor.slug %}">{% if vendor.logo %}заменить логотип{% else %}загрузить логотип{% endif %}</a>
     </p>
 
     {% if summary.checks_count %}

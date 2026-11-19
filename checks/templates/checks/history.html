@@ -6,50 +6,28 @@
 {% block content %}
     <h1>История проверок</h1>
 
-    {% for error in errors %}
-        <div class="alert alert-warning">{{ error }} Фильтр не применён.</div>
-    {% endfor %}
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <span></span>
+        <a href="{% url 'checks:create' %}" class="btn btn-success btn-sm">+ Добавить проверку</a>
+    </div>
 
-    <form method="get" class="row g-2 align-items-center mb-3">
-        <input type="hidden" name="sort" value="{{ sort }}">
-        <div class="col-auto">
-            <select name="day" class="form-select" aria-label="День проверки">
-                <option value="">все дни</option>
-                {% for item in days %}
-                    {% with value=item|date:"Y-m-d" %}
-                        <option value="{{ value }}" {% if value == day %}selected{% endif %}>{{ value }}</option>
-                    {% endwith %}
+    {% if form.errors %}
+        <div class="alert alert-warning">
+            Некоторые значения фильтра некорректны: такие фильтры не применены.
+        </div>
+    {% endif %}
+
+    <form method="get" class="row g-2 align-items-start mb-3" novalidate>
+        {{ form.sort }}
+        {% for field in form.visible_fields %}
+            <div class="col-auto{% if field.name == 'q' %} col-sm-4 col-lg-3{% endif %}">
+                <label for="{{ field.id_for_label }}" class="visually-hidden">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
                 {% endfor %}
-            </select>
-        </div>
-        <div class="col-auto">
-            <select name="status" class="form-select" aria-label="Статус">
-                <option value="">любой статус</option>
-                {% for item in statuses %}
-                    <option value="{{ item.status }}" {% if item.status == status %}selected{% endif %}>
-                        {{ item.status|status_label }} ({{ item.checks_count }})
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-auto">
-            <select name="vendor" class="form-select" aria-label="Разработчик">
-                <option value="">все разработчики</option>
-                {% for item in vendors %}
-                    <option value="{{ item.slug }}" {% if item.slug == vendor %}selected{% endif %}>{{ item.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-sm-4 col-lg-3">
-            <input
-                type="search"
-                name="q"
-                value="{{ query }}"
-                class="form-control"
-                placeholder="Модель: название или id"
-                aria-label="Поиск модели"
-            >
-        </div>
+            </div>
+        {% endfor %}
         <div class="col-auto">
             <button type="submit" class="btn btn-primary">Показать</button>
             {% if filtered %}
@@ -88,7 +66,7 @@
             <tbody>
                 {% for check in page %}
                     <tr>
-                        <td>{{ check.checked_at|date:"Y-m-d H:i" }}</td>
+                        <td><a href="{% url 'checks:detail' check.id %}">{{ check.checked_at|date:"Y-m-d H:i" }}</a></td>
                         <td>
                             <a href="{% url 'watchlist:detail' check.openrouter_id %}">
                                 {{ check.model_name|truncatechars:40 }}
